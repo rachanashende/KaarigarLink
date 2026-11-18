@@ -70,9 +70,19 @@ function changesVerifiedDetails(
     (field) => input[field] !== undefined && input[field] !== current[field],
   );
   const certificationsChanged =
-    normalizedCertifications !== undefined &&
-    [...normalizedCertifications].sort().join('|') !== [...current.certifications].sort().join('|');
+    normalizedCertifications !== undefined && !sameCertifications(normalizedCertifications, current.certifications);
   return fieldChanged || certificationsChanged;
+}
+
+/**
+ * Order-insensitive, item-by-item comparison. Never joins into a string, so
+ * values containing a delimiter (["A|B"] vs ["A", "B"]) can't collide.
+ */
+function sameCertifications(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, i) => value === sortedB[i]);
 }
 
 export async function updateWorkshop(user: AuthUser, id: string, input: UpdateWorkshopInput) {
@@ -93,15 +103,20 @@ export async function updateWorkshop(user: AuthUser, id: string, input: UpdateWo
     current.verificationStatus === 'VERIFIED' &&
     changesVerifiedDetails(current, input, normalizedCertifications);
 
-  return prisma.workshop.update({
-    where: { id },
+  // Optimistic concurrency: the write only applies if the row is unchanged since
+  // it was read above. Otherwise an owner edit and an admin verification racing
+  // each other could leave VERIFIED status on details no admin has reviewed.
+  const { count } = await prisma.workshop.updateMany({
+    where: { id, updatedAt: current.updatedAt, verificationStatus: current.verificationStatus },
     data: {
       ...rest,
       ...(normalizedCertifications && { certifications: normalizedCertifications }),
-      ...(resetVerification && { verificationStatus: 'PENDING' }),
+      ...(resetVerification && { verificationStatus: 'PENDING' as const }),
     },
-    include: workshopDetailInclude,
   });
+  if (count === 0) throw ApiError.conflict('Workshop was modified, please retry');
+
+  return prisma.workshop.findUniqueOrThrow({ where: { id }, include: workshopDetailInclude });
 }
 
 export async function listWorkshops(query: ListWorkshopsQuery) {

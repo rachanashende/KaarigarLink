@@ -337,6 +337,32 @@ describe('Verification reset on verified-detail changes', () => {
     }
   });
 
+  it('treats ["A|B"] and ["A", "B"] as different certifications (no delimiter collision)', async () => {
+    const { id, token } = await verifiedWorkshop();
+
+    // Admin sets ["A", "B"]; admin edits keep VERIFIED.
+    const setup = await request(app).put(`/api/workshops/${id}`).set(auth(adminToken)).send({ certifications: ['A', 'B'] });
+    expect(setup.body.data.workshop).toMatchObject({ certifications: ['A', 'B'], verificationStatus: 'VERIFIED' });
+
+    // Same set in a different order is unchanged -> stays VERIFIED.
+    const reordered = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send({ certifications: ['B', 'A'] });
+    expect(reordered.body.data.workshop.verificationStatus).toBe('VERIFIED');
+
+    // ["A|B"] joins to the same string as ["A","B"] but is a different list -> PENDING.
+    const collided = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send({ certifications: ['A|B'] });
+    expect(collided.status).toBe(200);
+    expect(collided.body.data.workshop).toMatchObject({ certifications: ['A|B'], verificationStatus: 'PENDING' });
+  });
+
+  it('keeps a REJECTED workshop REJECTED when the owner edits verified details', async () => {
+    const { id, token } = await verifiedWorkshop();
+    await request(app).put(`/api/workshops/${id}`).set(auth(adminToken)).send({ verificationStatus: 'REJECTED' });
+
+    const res = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send({ businessName: 'Fresh Start Forge' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.workshop.verificationStatus).toBe('REJECTED');
+  });
+
   it('admin edits to verified details preserve the existing verification status', async () => {
     const { id } = await verifiedWorkshop();
 
