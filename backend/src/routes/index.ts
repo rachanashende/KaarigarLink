@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import workshopRoutes from './workshop.routes';
 import { health } from '../controllers/health.controller';
 
 /**
@@ -10,5 +11,6 @@ const router = Router();
 
 router.get('/health', health);
 router.use('/auth', authRoutes);
+router.use('/workshops', workshopRoutes);
 
 export default router;

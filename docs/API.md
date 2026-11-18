@@ -102,20 +102,72 @@ Any authenticated role → `200 { "data": { "user": { ... } } }`. `401` if the t
 
 ---
 
-## Workshops (🚧 Day 2)
+## Workshops ✅
+
+All workshop endpoints require authentication. "owner / ADMIN" means the WORKSHOP user who owns that workshop, or any ADMIN; everyone else gets `403`.
+A frontend workshop user gets their own workshop id from `GET /api/auth/me` → `data.user.workshop.id` or from `GET /api/workshops/me`.
+
 | Method & path | Role | Purpose |
 |---|---|---|
-| `GET /api/workshops/me` | WORKSHOP | Own profile with machines, capabilities, capacity |
-| `GET /api/workshops/:id` | any auth | Workshop details |
-| `PUT /api/workshops/:id` | owner / ADMIN | Update profile |
-| `POST /api/workshops/:id/machines` | owner / ADMIN | Register machine |
-| `PUT /api/workshops/:id/machines/:machineId` | owner / ADMIN | Update machine |
-| `DELETE /api/workshops/:id/machines/:machineId` | owner / ADMIN | Remove machine |
-| `POST /api/workshops/:id/capabilities` | owner / ADMIN | Add capability |
-| `PUT /api/workshops/:id/capabilities/:capabilityId` | owner / ADMIN | Update capability |
-| `POST /api/workshops/:id/capacity` | owner / ADMIN | Add capacity window |
-| `PUT /api/workshops/:id/capacity/:capacityId` | owner / ADMIN | Update capacity window |
-| `GET /api/workshops/invitations` | WORKSHOP | My job invitations |
+| ✅ `GET /api/workshops/me` | WORKSHOP | Own profile with machines, capabilities, capacities |
+| ✅ `GET /api/workshops` | any auth | List. Query: `process`, `city`, `verificationStatus`, `page` (1), `limit` (20, max 100) |
+| ✅ `POST /api/workshops` | WORKSHOP | Create profile (only if the user has none; registration already creates one) → `409` if exists |
+| ✅ `GET /api/workshops/:id` | any auth | Full details |
+| ✅ `PUT /api/workshops/:id` | owner / ADMIN | Partial update. `verificationStatus` is ADMIN-only |
+| ✅ `GET /api/workshops/:id/machines` | any auth | List machines |
+| ✅ `POST /api/workshops/:id/machines` | owner / ADMIN | Register machine |
+| ✅ `PUT /api/workshops/:id/machines/:machineId` | owner / ADMIN | Partial update |
+| ✅ `DELETE /api/workshops/:id/machines/:machineId` | owner / ADMIN | Remove |
+| ✅ `GET /api/workshops/:id/capabilities` | any auth | List capabilities |
+| ✅ `POST /api/workshops/:id/capabilities` | owner / ADMIN | Add (one per process → `409` on duplicate) |
+| ✅ `PUT /api/workshops/:id/capabilities/:capabilityId` | owner / ADMIN | Update materials / specs / lead time |
+| ✅ `DELETE /api/workshops/:id/capabilities/:capabilityId` | owner / ADMIN | Remove |
+| ✅ `GET /api/workshops/:id/capacity` | any auth | List capacity windows (sorted by start) |
+| ✅ `POST /api/workshops/:id/capacity` | owner / ADMIN | Add window (`409` if it overlaps another window of the same unit) |
+| ✅ `PUT /api/workshops/:id/capacity/:capacityId` | owner / ADMIN | Update (e.g. `availableCapacity`) |
+| ✅ `DELETE /api/workshops/:id/capacity/:capacityId` | owner / ADMIN | Remove |
+| 🚧 `GET /api/workshops/invitations` | WORKSHOP | My job invitations (Day 3) |
+
+**Workshop object** (`data.workshop`)
+```json
+{
+  "id": "cm...", "userId": "cm...", "businessName": "Precision Works", "description": "5-axis CNC",
+  "address": "MIDC Bhosari", "city": "Pune", "latitude": 18.6298, "longitude": 73.8478,
+  "certifications": ["ISO_9001"], "rating": 4.6, "ratingCount": 12, "totalCompletedJobs": 30,
+  "verificationStatus": "VERIFIED", "createdAt": "...", "updatedAt": "...",
+  "user": { "id": "cm...", "name": "Ravi Patil" },
+  "machines": [ /* Machine */ ], "capabilities": [ /* Capability */ ], "capacities": [ /* Capacity */ ]
+}
+```
+`rating`, `ratingCount` and `totalCompletedJobs` are read-only here; Member 2's rating/order modules update them.
+
+**PUT /api/workshops/:id** (any subset)
+```json
+{ "businessName": "...", "description": "...", "address": "...", "city": "...",
+  "latitude": 18.6, "longitude": 73.8, "certifications": ["iso 9001"], "verificationStatus": "VERIFIED" }
+```
+Set `latitude` and `longitude` both to `null` to clear the location. Unknown fields → `400`.
+
+**POST /machines** → `201 { data: { machine } }`
+```json
+{ "machineName": "Haas VF-2", "machineType": "CNC_MILL", "quantity": 2,
+  "operationalStatus": "OPERATIONAL", "specifications": { "axes": 3, "bedSizeMm": [760, 406, 508] } }
+```
+Defaults: `quantity` 1, `operationalStatus` OPERATIONAL. Only OPERATIONAL machines count in matching.
+
+**POST /capabilities** → `201 { data: { capability } }`
+```json
+{ "manufacturingProcess": "CNC_MACHINING", "supportedMaterials": ["Aluminium", "Mild Steel"],
+  "specifications": { "minToleranceMm": 0.01, "maxPartSizeMm": 600 }, "leadTimeDays": 3 }
+```
+Materials are stored lower-case and de-duplicated, and common aliases are unified (`aluminum` → `aluminium`, `ss` → `stainless steel`, `ms` → `mild steel`). Certifications are stored upper-case (`iso 9001` → `ISO_9001`).
+`specifications.minToleranceMm` (the tightest tolerance achievable) and `maxPartSizeMm` are read by the matching engine.
+
+**POST /capacity** → `201 { data: { capacity } }`
+```json
+{ "availableCapacity": 1000, "capacityUnit": "UNITS", "startDate": "2026-11-20", "endDate": "2026-12-20" }
+```
+Meaning: *1000 units can be produced between these dates.* A date-only `endDate` includes that whole day. `endDate` must be on or after `startDate` and not in the past. On update, `availableCapacity: 0` means fully booked.
 
 ## Jobs (🚧 Day 2)
 | Method & path | Role | Purpose |

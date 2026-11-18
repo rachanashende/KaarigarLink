@@ -1,5 +1,7 @@
 import request from 'supertest';
 import { app } from '../../src/app';
+import { prisma } from '../../src/utils/prisma';
+import { signToken } from '../../src/utils/jwt';
 
 let counter = 0;
 
@@ -22,4 +24,21 @@ export async function registerUser(
   const res = await request(app).post('/api/auth/register').send(body);
   if (res.status !== 201) throw new Error(`registerUser failed: ${res.status} ${JSON.stringify(res.body)}`);
   return { token: res.body.data.token as string, user: res.body.data.user, password: body.password };
+}
+
+/**
+ * Creates a user directly in the DB (bypasses API rules) and returns a token.
+ * Used for ADMIN (cannot self-register) and for a WORKSHOP user without a profile.
+ */
+export async function createUserDirect(role: 'ADMIN' | 'WORKSHOP' | 'BUYER' | 'INSPECTOR') {
+  counter += 1;
+  const user = await prisma.user.create({
+    data: {
+      name: `Direct ${role} ${counter}`,
+      email: `direct.${role.toLowerCase()}${counter}.${Date.now()}@test.com`,
+      passwordHash: 'not-used',
+      role,
+    },
+  });
+  return { user, token: signToken({ sub: user.id, email: user.email, role: user.role }) };
 }
