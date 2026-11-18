@@ -291,3 +291,64 @@ describe('Workshop details & listing', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('Verification reset on verified-detail changes', () => {
+  async function verifiedWorkshop() {
+    const ws = await registerUser('WORKSHOP', {
+      workshop: { businessName: 'Verified Forge', city: 'Nashik', latitude: 19.99, longitude: 73.78 },
+    });
+    const id = ws.user.workshop.id as string;
+    const verify = await request(app)
+      .put(`/api/workshops/${id}`)
+      .set(auth(adminToken))
+      .send({ verificationStatus: 'VERIFIED' });
+    expect(verify.body.data.workshop.verificationStatus).toBe('VERIFIED');
+    return { id, token: ws.token };
+  }
+
+  it('owner editing verified details resets VERIFIED to PENDING; description-only edits do not', async () => {
+    const { id, token } = await verifiedWorkshop();
+
+    // Description-only change keeps VERIFIED.
+    const desc = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send({ description: 'Now with heat treatment' });
+    expect(desc.status).toBe(200);
+    expect(desc.body.data.workshop.verificationStatus).toBe('VERIFIED');
+
+    // Re-submitting unchanged verified values keeps VERIFIED.
+    const same = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send({ businessName: 'Verified Forge', city: 'Nashik' });
+    expect(same.body.data.workshop.verificationStatus).toBe('VERIFIED');
+
+    // Adding a certification is a verified-detail change -> PENDING.
+    const cert = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send({ certifications: ['iso 9001'] });
+    expect(cert.status).toBe(200);
+    expect(cert.body.data.workshop).toMatchObject({ certifications: ['ISO_9001'], verificationStatus: 'PENDING' });
+
+    // Same for business name, address, city and coordinates once re-verified.
+    for (const change of [
+      { businessName: 'Renamed Forge' },
+      { address: 'Plot 7, Satpur MIDC' },
+      { city: 'Pune' },
+      { latitude: 18.52, longitude: 73.85 },
+    ]) {
+      await request(app).put(`/api/workshops/${id}`).set(auth(adminToken)).send({ verificationStatus: 'VERIFIED' });
+      const res = await request(app).put(`/api/workshops/${id}`).set(auth(token)).send(change);
+      expect(res.status).toBe(200);
+      expect(res.body.data.workshop.verificationStatus, JSON.stringify(change)).toBe('PENDING');
+    }
+  });
+
+  it('admin edits to verified details preserve the existing verification status', async () => {
+    const { id } = await verifiedWorkshop();
+
+    const res = await request(app)
+      .put(`/api/workshops/${id}`)
+      .set(auth(adminToken))
+      .send({ businessName: 'Admin Corrected Forge', certifications: ['AS9100'], latitude: 20.0, longitude: 73.8 });
+    expect(res.status).toBe(200);
+    expect(res.body.data.workshop).toMatchObject({
+      businessName: 'Admin Corrected Forge',
+      certifications: ['AS9100'],
+      verificationStatus: 'VERIFIED',
+    });
+  });
+});

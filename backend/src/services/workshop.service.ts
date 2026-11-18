@@ -52,19 +52,53 @@ export async function getMyWorkshopId(user: AuthUser): Promise<string> {
   return ws.id;
 }
 
+type WorkshopRow = Awaited<ReturnType<typeof assertCanManageWorkshop>>;
+
+/** Fields an admin checks when verifying a workshop. `description` is not one of them. */
+const VERIFIED_FIELDS = ['businessName', 'address', 'city', 'latitude', 'longitude'] as const;
+
+/**
+ * True if the update actually changes a verified field. Values equal to the
+ * current ones (e.g. a form re-submitting unchanged data) do not count.
+ */
+function changesVerifiedDetails(
+  current: WorkshopRow,
+  input: UpdateWorkshopInput,
+  normalizedCertifications: string[] | undefined,
+): boolean {
+  const fieldChanged = VERIFIED_FIELDS.some(
+    (field) => input[field] !== undefined && input[field] !== current[field],
+  );
+  const certificationsChanged =
+    normalizedCertifications !== undefined &&
+    [...normalizedCertifications].sort().join('|') !== [...current.certifications].sort().join('|');
+  return fieldChanged || certificationsChanged;
+}
+
 export async function updateWorkshop(user: AuthUser, id: string, input: UpdateWorkshopInput) {
-  await assertCanManageWorkshop(user, id);
+  const current = await assertCanManageWorkshop(user, id);
 
   if (input.verificationStatus !== undefined && user.role !== 'ADMIN') {
     throw ApiError.forbidden('Only an admin can change verification status');
   }
 
   const { certifications, ...rest } = input;
+  const normalizedCertifications = certifications ? normalizeCertifications(certifications) : undefined;
+
+  // A non-admin edit to verified details sends a VERIFIED workshop back to PENDING
+  // for admin re-review. REJECTED stays REJECTED (an edit must not self-un-reject),
+  // and admin edits keep the current status unless the admin sets it explicitly.
+  const resetVerification =
+    user.role !== 'ADMIN' &&
+    current.verificationStatus === 'VERIFIED' &&
+    changesVerifiedDetails(current, input, normalizedCertifications);
+
   return prisma.workshop.update({
     where: { id },
     data: {
       ...rest,
-      ...(certifications && { certifications: normalizeCertifications(certifications) }),
+      ...(normalizedCertifications && { certifications: normalizedCertifications }),
+      ...(resetVerification && { verificationStatus: 'PENDING' }),
     },
     include: workshopDetailInclude,
   });
