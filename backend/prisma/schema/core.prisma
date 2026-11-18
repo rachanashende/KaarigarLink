@@ -1,0 +1,282 @@
+// ============================================================================
+// CORE DOMAIN - owned by Member 1
+// Users & auth, workshop profiles, machines, capabilities, capacity,
+// buyer jobs, matching results and job invitations.
+// ============================================================================
+
+// ---------- Enums ----------
+
+enum Role {
+  BUYER
+  WORKSHOP
+  INSPECTOR
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ManufacturingProcess {
+  CNC_MACHINING
+  LATHE_TURNING
+  SHEET_METAL_FABRICATION
+  LASER_CUTTING
+  WELDING
+  INJECTION_MOLDING
+  CASTING
+  FORGING
+  THREE_D_PRINTING
+  POWDER_COATING
+}
+
+enum MachineType {
+  CNC_MILL
+  CNC_LATHE
+  MANUAL_LATHE
+  LASER_CUTTER
+  PRESS_BRAKE
+  PUNCH_PRESS
+  WELDING_STATION
+  INJECTION_MOLDER
+  CASTING_FURNACE
+  FORGING_HAMMER
+  THREE_D_PRINTER
+  POWDER_COATING_BOOTH
+  OTHER
+}
+
+enum MachineStatus {
+  OPERATIONAL
+  MAINTENANCE
+  OFFLINE
+}
+
+/// Unit used for both job quantity and workshop capacity. Matching only
+/// compares capacity windows whose unit equals the job's quantity unit.
+enum QuantityUnit {
+  UNITS
+  KG
+}
+
+/// Job lifecycle. Member 1 drives DRAFT -> OPEN -> MATCHED.
+/// Member 2 (quotes/orders) drives MATCHED -> AWARDED -> IN_PROGRESS -> COMPLETED.
+/// CANCELLED can be set by the buyer (before AWARDED) or by order cancellation.
+enum JobStatus {
+  DRAFT
+  OPEN
+  MATCHED
+  AWARDED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// Machine-checkable job requirements used by the matching engine.
+///   MACHINE_TYPE      value = a MachineType, e.g. "CNC_MILL"
+///   TOLERANCE_MM      value = tightest tolerance the job needs, e.g. "0.01"
+///                     (workshop capability.specifications.minToleranceMm must be <= value)
+///   PART_SIZE_MM      value = largest part dimension, e.g. "450"
+///                     (workshop capability.specifications.maxPartSizeMm must be >= value)
+///   CERTIFICATION     value = e.g. "ISO_9001" (must be in workshop.certifications)
+///   OTHER             free text, informational only (never filters)
+enum RequirementType {
+  MACHINE_TYPE
+  TOLERANCE_MM
+  PART_SIZE_MM
+  CERTIFICATION
+  OTHER
+}
+
+enum InvitationStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+// ---------- Models ----------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workshop Workshop?
+  jobs     Job[]     @relation("BuyerJobs")
+
+  // Member 2: add back-relations here, e.g.
+  //   ordersAsBuyer Order[]      @relation("BuyerOrders")
+  //   inspections   Inspection[]
+
+  @@index([role])
+}
+
+model Workshop {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  businessName       String
+  description        String?
+  address            String?
+  city               String?
+  latitude           Float?
+  longitude          Float?
+  certifications     String[]           @default([])
+  /// Average rating 0-5. Maintained by Member 2's rating module.
+  rating             Float              @default(0)
+  ratingCount        Int                @default(0)
+  /// Maintained by Member 2's order module on completion.
+  totalCompletedJobs Int                @default(0)
+  verificationStatus VerificationStatus @default(PENDING)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  machines     Machine[]
+  capabilities Capability[]
+  capacities   WorkshopCapacity[]
+  invitations  JobInvitation[]
+
+  // Member 2: add back-relations here, e.g.
+  //   quotes  Quote[]
+  //   orders  Order[]
+  //   ratings Rating[]
+
+  @@index([verificationStatus])
+}
+
+model Machine {
+  id                String        @id @default(cuid())
+  workshopId        String
+  machineName       String
+  machineType       MachineType
+  /// Free-form specs, e.g. { "axes": 5, "bedSizeMm": [800, 500, 500] }
+  specifications    Json?
+  quantity          Int           @default(1)
+  operationalStatus MachineStatus @default(OPERATIONAL)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId, machineType])
+}
+
+model Capability {
+  id                   String               @id @default(cuid())
+  workshopId           String
+  manufacturingProcess ManufacturingProcess
+  /// Lower-cased material names, e.g. ["aluminium", "mild steel"]
+  supportedMaterials   String[]
+  /// Checkable specs: { "minToleranceMm": 0.01, "maxPartSizeMm": 600 }
+  specifications       Json?
+  /// Fixed days added after production (setup, finishing, dispatch)
+  leadTimeDays         Int                  @default(0)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  @@unique([workshopId, manufacturingProcess])
+  @@index([manufacturingProcess])
+}
+
+/// A window of free production capacity: `availableCapacity` units can be
+/// produced between startDate and endDate (inclusive).
+model WorkshopCapacity {
+  id                String       @id @default(cuid())
+  workshopId        String
+  availableCapacity Int
+  capacityUnit      QuantityUnit @default(UNITS)
+  startDate         DateTime
+  endDate           DateTime
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId, startDate, endDate])
+}
+
+model Job {
+  id                      String               @id @default(cuid())
+  buyerId                 String
+  title                   String
+  description             String?
+  /// Lower-cased material name, e.g. "aluminium"
+  material                String
+  manufacturingProcess    ManufacturingProcess
+  quantity                Int
+  quantityUnit            QuantityUnit         @default(UNITS)
+  deadline                DateTime
+  address                 String?
+  latitude                Float?
+  longitude               Float?
+  /// Human-readable specs (drawings, finish, notes). Not used for filtering;
+  /// machine-checkable rules live in JobRequirement.
+  technicalSpecifications Json?
+  status                  JobStatus            @default(OPEN)
+  matchedAt               DateTime?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  buyer        User             @relation("BuyerJobs", fields: [buyerId], references: [id], onDelete: Cascade)
+  requirements JobRequirement[]
+  invitations  JobInvitation[]
+
+  // Member 2: add back-relations here, e.g.
+  //   quotes Quote[]
+  //   order  Order?
+
+  @@index([buyerId])
+  @@index([status])
+  @@index([manufacturingProcess, status])
+}
+
+model JobRequirement {
+  id               String          @id @default(cuid())
+  jobId            String
+  requirementType  RequirementType
+  requirementValue String
+  /// Mandatory requirements exclude non-compliant workshops.
+  isMandatory      Boolean         @default(true)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+/// One row per (job, workshop) pair produced by the matching engine.
+/// Doubles as the persisted match result (score, breakdown, reasons).
+model JobInvitation {
+  id             String           @id @default(cuid())
+  jobId          String
+  workshopId     String
+  matchScore     Float
+  distanceKm     Float?
+  /// { distanceScore, ratingScore, capacityScore, weights }
+  scoreBreakdown Json
+  matchReasons   String[]
+  rank           Int
+  status         InvitationStatus @default(INVITED)
+  responseNote   String?
+  respondedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  job      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  // Member 2: Quote should reference invitationId so only invited workshops quote.
+  //   quotes Quote[]
+
+  @@unique([jobId, workshopId])
+  @@index([workshopId, status])
+}

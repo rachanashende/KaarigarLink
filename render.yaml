@@ -1,0 +1,42 @@
+# Render Blueprint - KaarigarLink backend + database.
+# Render dashboard -> New -> Blueprint -> select this repo, branch `backend`.
+# Local development uses your own PostgreSQL; production uses the Render
+# Postgres instance defined below (wired in automatically via fromDatabase).
+# Note: Render's free Postgres expires 30 days after creation - fine for the hackathon.
+databases:
+  - name: kaarigarlink-db
+    plan: free
+    region: singapore
+    databaseName: kaarigarlink
+    user: kaarigarlink
+
+services:
+  - type: web
+    name: kaarigarlink-api
+    runtime: node
+    plan: free
+    region: singapore # must match the database region
+    branch: backend
+    rootDir: backend
+    # Dev deps (typescript, prisma CLI) are needed to build.
+    buildCommand: npm ci --include=dev && npm run build
+    # Free plan has no pre-deploy hook, so migrations run on start.
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kaarigarlink-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGINS
+        sync: false # e.g. https://kaarigarlink.vercel.app,http://localhost:5173
+      - key: BCRYPT_SALT_ROUNDS
+        value: 10
