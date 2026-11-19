@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { DEMO_WORKSHOP_CREDENTIALS } from '../../services/demoAuthService'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -22,7 +22,7 @@ export default function LoginPage() {
     && requestedPath.startsWith('/')
     && !requestedPath.startsWith('//')
     ? requestedPath
-    : '/'
+    : '/workshop/dashboard'
 
   if (isAuthenticated) return <Navigate to={destination} replace />
 
@@ -134,7 +134,7 @@ export default function LoginPage() {
           </div>
 
           <p className="login-disclaimer">This mock sign-in is for demonstration only. It does not use a backend, issue JWTs or provide production authentication.</p>
-          <p className="login-register-link">New to KaarigarLink? <Link to="/onboarding">Register your workshop</Link></p>
+          <p className="login-register-link">New to KaarigarLink? <Link to="/workshop/onboarding">Register your workshop</Link></p>
         </div>
       </section>
       <footer className="login-footer">© 2026 KaarigarLink <span>·</span> Workshop workspace demo</footer>

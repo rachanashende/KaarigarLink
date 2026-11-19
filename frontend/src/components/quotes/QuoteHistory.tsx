@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import type { DemoQuote } from '../../types/quote'
 import type { Invitation } from '../../types/workshop'
 
@@ -29,7 +29,7 @@ export default function QuoteHistory({ quotes, invitations }: { quotes: DemoQuot
                   <td>{dateFormat.format(new Date(quote.updatedAt))}</td>
                   <td><span className={`status status-${quote.status.toLowerCase()}`}>{quote.status}</span></td>
                   <td>{invitationExists
-                    ? <Link className="row-action" to={`/invitations/${quote.invitationId}`} aria-label={`View quote for ${quote.jobTitle}`}>→</Link>
+                    ? <Link className="row-action" to={`/workshop/invitations/${quote.invitationId}`} aria-label={`View quote for ${quote.jobTitle}`}>→</Link>
                     : <span className="quote-archived-label">Archived</span>}
                   </td>
                 </tr>

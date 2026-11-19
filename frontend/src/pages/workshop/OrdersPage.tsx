@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { useWorkshopData } from '../../hooks/useWorkshopData'
 import type { OrderStatus, WorkshopOrder } from '../../types/workshop'
 
@@ -81,8 +81,8 @@ export default function OrdersPage() {
   }, [orders, query, sort, status])
 
   if (orderId) {
-    if (!order) return <section className="panel detail-panel"><div className="empty-state"><h2>Order not found</h2><p>This order is not in your workshop workspace.</p><Link className="text-button" to="/orders">Back to orders</Link></div></section>
-    return <><button className="back-button" onClick={() => navigate('/orders')}>← Back to orders</button><OrderDetail order={order} onStatusChange={(nextStatus) => updateOrderStatus(order.id, nextStatus)} /></>
+    if (!order) return <section className="panel detail-panel"><div className="empty-state"><h2>Order not found</h2><p>This order is not in your workshop workspace.</p><Link className="text-button" to="/workshop/orders">Back to orders</Link></div></section>
+    return <><button className="back-button" onClick={() => navigate('/workshop/orders')}>← Back to orders</button><OrderDetail order={order} onStatusChange={(nextStatus) => updateOrderStatus(order.id, nextStatus)} /></>
   }
 
   const count = (value: string) => value === 'Total Orders' ? orders.length : value === 'Completed Orders' ? orders.filter((item) => item.status === 'Completed').length : orders.filter((item) => item.status === value).length
@@ -110,7 +110,7 @@ export default function OrdersPage() {
         <div className="table-wrap">
           <table className="data-table orders-table"><thead><tr><th>Order / Product</th><th>Buyer</th><th>Quantity</th><th>Value</th><th>Order date</th><th>Deadline</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>{filteredOrders.map((item) => <tr key={item.id}>
-              <td><strong>{item.id}</strong><small>{item.title}</small></td><td>{item.buyer}</td><td>{item.quantity.toLocaleString('en-IN')}</td><td>{currency.format(item.price)}</td><td>{dateFormat.format(new Date(`${item.orderDate}T00:00:00`))}</td><td>{dateFormat.format(new Date(`${item.deadline}T00:00:00`))}</td><td><span className={statusClass(item.status)}>{item.status}</span></td><td><Link className="row-action" to={`/orders/${item.id}`} aria-label={`View ${item.id}`}>→</Link></td>
+              <td><strong>{item.id}</strong><small>{item.title}</small></td><td>{item.buyer}</td><td>{item.quantity.toLocaleString('en-IN')}</td><td>{currency.format(item.price)}</td><td>{dateFormat.format(new Date(`${item.orderDate}T00:00:00`))}</td><td>{dateFormat.format(new Date(`${item.deadline}T00:00:00`))}</td><td><span className={statusClass(item.status)}>{item.status}</span></td><td><Link className="row-action" to={`/workshop/orders/${item.id}`} aria-label={`View ${item.id}`}>→</Link></td>
             </tr>)}</tbody>
           </table>
           {!filteredOrders.length && <div className="empty-state"><h2>No orders found</h2><p>Try changing your search or status filter.</p><button className="text-button" onClick={() => { setQuery(''); setStatus('All') }}>Clear filters</button></div>}

@@ -1,3 +1,4 @@
+import { createMockWorkshop } from './mockWorkshop';
 import { createMockAdmin } from './mockAdmin';
 import { createMockInspections } from './mockInspections';
 import { createMockOrders } from './mockOrders';
@@ -14,6 +15,7 @@ export function createMockService(store: MockStore = createMockStore()): DataSer
     demo: { get description() { return store.persistenceDescription; }, get warning() { return store.warning; }, async reset() { store.reset(); } },
     inspector: createMockInspections(store),
     admin: createMockAdmin(store),
+    workshop: createMockWorkshop(store),
     buyer: {
       ...createMockMarketplace(store),
       ...createMockOrders(store),

@@ -86,3 +86,19 @@ Workshop feature directory/routes/identity remain untouched. New Admin UI under 
 DataService adds read-only admin.getOverview(actorId), guarded by canonical admin role. All shared entities/enums and existing persistence version/key are unchanged. Admin responses omit exact addresses/coordinates, attachment metadata and private QC drafts. Inspector decisions and buyer actions still use their existing services; Admin only observes submitted shared state. No QC logic or workshop milestone ownership changes.
 
 Use the shared service factory when composing test/demo services. Future concrete adapters must provide the admin namespace or explicitly reject it; agree server-side access/pagination and field permissions with Members 1/2. Do not infer a moderation or lifecycle transition from an admin reporting group or alert. Existing demo reset now also appears on Admin dashboard and resets all-role demo state after confirmation.
+
+## Phase 8B.1 routing foundation (current integration branch)
+
+The earlier absent-directory/placeholder statements above describe their original phases. features/workshop now contains WorkshopPage, routing/guard tests and its boundary README. Member 3 implementation source remains in its structurally merged locations for coordinated reconciliation; it has not been replaced or deleted.
+
+Canonical workshop dashboard/list/detail/profile/settings/onboarding paths are registered in app/router.tsx under the existing session/shell/workshop guard. app/roles.ts owns workshopNavigation, shared by the shell and page links. /workshop redirects to the retained /workshop/dashboard landing route. Each workspace is explicitly disabled; no separate workshop store or provider is mounted and no standalone records are shown. Authentication/logout remains shared. Onboarding is guarded and cannot save a registration/draft yet.
+
+Legacy imports compile using installed react-router; standalone navigation links use /workshop paths. Legacy App.css/index.css stay outside the active import graph. Do not mount the standalone App, shell, DemoAuthProvider or WorkshopDataProvider to enable the pages.
+
+Phase 8B.2 needs a scoped shared workshop service, canonical owner identity, agreed typed projections and query/persistence integration. Phase 8B.3 needs separately approved invitation/quotation/production/QC/payment commands and cross-role tests. Do not cast standalone types to shared entities, create orders from invitation response, bypass buyer award or inspector QC, set payment paid, or edit another workshop's records. Backend/service sign-off remains outstanding. No new workflow command or shared contract change is introduced in Phase 8B.1.
+
+## Phase 8B.2 shared reads (current)
+
+This supersedes the Phase 8B.1 data-unavailable state. The existing guarded WorkshopPage now loads WorkshopRecords using a user-keyed query and DataService.workshop, over the same mock store as Buyer/Inspector/Admin. It shows actual own invitations/jobs/quotes/orders/milestones/submitted QC/rework/payment simulation/profile/capacity/account records. Exact User.id -> Workshop.ownerId resolves ownership; canonical invitation IDs now name the invitation-detail route parameter. No standalone data or mutation handler is activated.
+
+All workshop business actions and buyer award remain disabled. Existing shared persistence/reset is reused unchanged; workshop reads perform no storage write. Legacy source stays available for coordinated reconciliation. See phase-8b2-workshop-contracts.md for explicit domain mappings, read projections and unsupported fields. Phase 8B.3 must agree and test approved workflow commands before enabling any write.

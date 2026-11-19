@@ -196,3 +196,7 @@ See [phase-6-admin-contracts.md](phase-6-admin-contracts.md). DataService.admin.
 All existing entity fields, status unions, seeds, buyer/inspector commands and persistence are unchanged. Admin reads whitelist known operational fields and exclude credential/unknown secret fields, private QC drafts, attachment metadata, exact addresses and coordinates. No moderation, verification, award, lifecycle, QC or payment mutation method exists.
 
 Filters, details, metrics and deterministic demo alerts use that bounded snapshot. Production pagination/filter/read entitlements and transport remain backend dependencies. The existing confirmed all-role demo reset is reused; it is not a business moderation action.
+
+## Phase 8B.2 workshop read namespace
+
+DataService now requires workshop.getWorkspace(actorId), getInvitation(actorId, invitationId) and getOrder(actorId, orderId). These read the existing shared mock store, resolve the exact canonical User -> Workshop.ownerId mapping and enforce workshop role/ownership before returning joined records. Missing profiles do not fall back to another workshop; ambiguous mappings and invalid references fail explicitly. No shared domain entity/enum, fixture, persistence version or workflow command changed. See phase-8b2-workshop-contracts.md for typed projections, privacy, unavailable legacy fields, reset and outstanding backend approval requirements.

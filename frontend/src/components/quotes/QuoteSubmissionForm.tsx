@@ -52,7 +52,12 @@ export default function QuoteSubmissionForm({ invitation, existingQuote, onCance
 
   function updateField(field: QuoteField, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
-    setErrors((current) => ({ ...current, [field]: undefined, total: undefined }))
+    setErrors((current) => {
+      const next = { ...current }
+      delete next[field]
+      delete next.total
+      return next
+    })
     setFormError('')
   }
 

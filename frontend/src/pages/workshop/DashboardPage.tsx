@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { useWorkshopData } from '../../hooks/useWorkshopData'
 
 function TrendIcon({ direction = 'up' }: { direction?: 'up' | 'down' }) {
@@ -24,7 +24,7 @@ export default function DashboardPage() {
           <h1>Good morning, Rohan</h1>
           <p className="page-subtitle">Here is what is happening with your workshop today.</p>
         </div>
-        <Link className="primary-button" to="/invitations">Browse invitations <span>→</span></Link>
+        <Link className="primary-button" to="/workshop/invitations">Browse invitations <span>→</span></Link>
       </div>
 
       <section className="stats-grid" aria-label="Workshop summary">
@@ -47,7 +47,7 @@ export default function DashboardPage() {
               <h2>Production overview</h2>
               <p>Current order progress</p>
             </div>
-            <Link className="text-button" to="/orders">View all orders →</Link>
+            <Link className="text-button" to="/workshop/orders">View all orders →</Link>
           </div>
           <div className="production-content">
             <div className="progress-ring" aria-label="68 percent production capacity">
@@ -109,7 +109,7 @@ export default function DashboardPage() {
             <h2>Recent invitations</h2>
             <p>Latest manufacturing opportunities</p>
           </div>
-          <Link className="text-button" to="/invitations">View all invitations →</Link>
+          <Link className="text-button" to="/workshop/invitations">View all invitations →</Link>
         </div>
         <div className="table-wrap">
           <table>
@@ -124,7 +124,7 @@ export default function DashboardPage() {
                   <td>{job.quantity.toLocaleString('en-IN')} units</td>
                   <td>{new Intl.DateTimeFormat('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }).format(new Date(`${job.deadline}T00:00:00`))}</td>
                   <td><span className={`status ${job.status.toLowerCase() === 'new' ? 'new' : job.status.toLowerCase()}`}>{job.status}</span></td>
-                  <td><Link className="row-action" to={`/invitations/${job.id}`} aria-label={`View ${job.title}`}>→</Link></td>
+                  <td><Link className="row-action" to={`/workshop/invitations/${job.id}`} aria-label={`View ${job.title}`}>→</Link></td>
                 </tr>
               ))}
             </tbody>

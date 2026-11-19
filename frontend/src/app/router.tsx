@@ -7,8 +7,7 @@ import { LoadingState, UnauthorizedState } from '@/components/feedback';
 import { Button } from '@/components/ui/button';
 import { AppShell } from './AppShell';
 const FoundationPage = lazy(() => import('./FoundationPage').then(module => ({ default: module.FoundationPage })));
-import { RoleLandingPage } from './RoleLandingPage';
-import { roles, roleOrder } from './roles';
+import { roles, roleOrder, workshopNavigation } from './roles';
 
 const BuyerDashboard = lazy(() => import('@/features/buyer/BuyerDashboard').then(module => ({ default: module.BuyerDashboard })));
 const PostJobPage = lazy(() => import('@/features/buyer/PostJobPage').then(module => ({ default: module.PostJobPage })));
@@ -24,6 +23,8 @@ const OrderDetailPage = lazy(() => import('@/features/buyer/OrderDetailPage').th
 const InspectorDashboard = lazy(() => import('@/features/inspector/InspectorDashboard').then(module => ({ default: module.InspectorDashboard })));
 const InspectionsPage = lazy(() => import('@/features/inspector/InspectionsPage').then(module => ({ default: module.InspectionsPage })));
 const InspectionDetailPage = lazy(() => import('@/features/inspector/InspectionDetailPage').then(module => ({ default: module.InspectionDetailPage })));
+
+const WorkshopPage = lazy(() => import('@/features/workshop/WorkshopPage').then(module => ({ default: module.WorkshopPage })));
 
 const AdminDashboard = lazy(() => import('@/features/admin/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 const AdminListPage = lazy(() => import('@/features/admin/AdminListPage').then(module => ({ default: module.AdminListPage })));
@@ -70,10 +71,10 @@ export function AppRoutes() {
       <Route path="/foundation" element={<Suspense fallback={<LoadingState label="Loading foundation…" />}><FoundationPage /></Suspense>} />
       <Route element={<RequireSession />}>
         <Route element={<AppShell />}>
-          {/* Workshop registration stays here; Member 3 replaces only its dashboard child later. */}
+          {/* Workshop routes share this router, session, shell and role guard. */}
           {roleOrder.map(role => <Route key={role} path={role} element={<RequireRole role={role} />}>
             <Route index element={<Navigate to={roles[role].landing} replace />} />
-            <Route path="dashboard" element={role === 'buyer' ? <BuyerDashboard /> : role === 'inspector' ? <InspectorDashboard /> : role === 'admin' ? <AdminDashboard /> : <RoleLandingPage />} />
+            <Route path="dashboard" element={role === 'buyer' ? <BuyerDashboard /> : role === 'inspector' ? <InspectorDashboard /> : role === 'admin' ? <AdminDashboard /> : <WorkshopPage />} />
             {role === 'buyer' && <>
               <Route path="orders" element={<OrdersListPage />} />
               <Route path="orders/:id" element={<OrderDetailPage />} />
@@ -83,6 +84,11 @@ export function AppRoutes() {
               <Route path="jobs/:id" element={<JobDetailPage />} />
               <Route path="jobs/:id/matches" element={<MatchesPage />} />
               <Route path="jobs/:id/quotes" element={<QuotesPage />} />
+            </>}
+            {role === 'workshop' && <>
+              {workshopNavigation.map(({ section }) => <Route key={section} path={section} element={<WorkshopPage section={section} />} />)}
+              <Route path="invitations/:invitationId" element={<WorkshopPage section="invitations" />} />
+              <Route path="orders/:orderId" element={<WorkshopPage section="orders" />} />
             </>}
             {role === 'inspector' && <>
               <Route path="inspections" element={<InspectionsPage />} />

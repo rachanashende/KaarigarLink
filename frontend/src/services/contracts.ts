@@ -1,3 +1,4 @@
+import type { WorkshopService } from './workshop';
 import type { AdminService } from './admin';
 import type { InspectorService } from './inspections';
 import type { BuyerService } from './jobs';
@@ -15,6 +16,7 @@ export interface DataService {
   buyer: BuyerService;
   inspector: InspectorService;
   admin: AdminService;
+  workshop: WorkshopService;
   demo?: { readonly description: string; readonly warning: string | null; reset(): Promise<void> };
   list<K extends keyof Collections>(collection: K): Promise<Collections[K]>;
 }

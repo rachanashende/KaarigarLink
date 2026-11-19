@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { cn } from '@/components/utils';
-import { roles } from './roles';
+import { roles, workshopNavigation } from './roles';
 
 export function AppShell() {
   const { user, signOut } = useAuth();
@@ -29,12 +29,14 @@ export function AppShell() {
   const isBuyer = user.role === 'buyer';
   const isInspector = user.role === 'inspector';
   const isAdmin = user.role === 'admin';
+  const isWorkshop = user.role === 'workshop';
+  const workshopCrumb = isWorkshop ? workshopNavigation.find(item => location.pathname === item.path || location.pathname.startsWith(item.path + '/'))?.label : undefined;
   const isJobChild = user.role === 'buyer' && location.pathname.startsWith('/buyer/jobs/');
   const isOrderChild = isBuyer && location.pathname.startsWith('/buyer/orders/');
   const inspectorCrumb = user.role === 'inspector' && location.pathname.startsWith('/inspector/inspections/') ? 'Inspection details' : location.pathname === '/inspector/inspections' ? 'Inspections' : location.pathname === '/inspector/rework' ? 'Rework follow-up' : location.pathname === '/inspector/history' ? 'Inspection history' : null;
   const adminSection = isAdmin ? ({ users: 'Users', workshops: 'Workshops', jobs: 'Jobs', orders: 'Orders', quality: 'Quality operations' } as Record<string, string>)[location.pathname.split('/')[2] ?? ''] : undefined;
   const adminCrumb = adminSection ? adminSection + (location.pathname.split('/').length > 3 ? ' / Record details' : '') : null;
-  const breadcrumb = adminCrumb ?? inspectorCrumb ?? ( location.pathname === '/buyer/orders' ? 'Orders' : isOrderChild ? (location.pathname.endsWith('/review') ? 'Workshop review' : 'Order tracking') : isJobChild && location.pathname.endsWith('/matches') ? 'Workshop matches' : isJobChild && location.pathname.endsWith('/quotes') ? 'Quotations' : location.pathname === role.landing ? 'Overview' : location.pathname === '/buyer/jobs' ? 'Jobs' : location.pathname === '/buyer/jobs/new' ? 'Post job' : isJobChild ? 'Job details' : 'Page access');
+  const breadcrumb = workshopCrumb ?? adminCrumb ?? inspectorCrumb ?? ( location.pathname === '/buyer/orders' ? 'Orders' : isOrderChild ? (location.pathname.endsWith('/review') ? 'Workshop review' : 'Order tracking') : isJobChild && location.pathname.endsWith('/matches') ? 'Workshop matches' : isJobChild && location.pathname.endsWith('/quotes') ? 'Quotations' : location.pathname === role.landing ? 'Overview' : location.pathname === '/buyer/jobs' ? 'Jobs' : location.pathname === '/buyer/jobs/new' ? 'Post job' : isJobChild ? 'Job details' : 'Page access');
   const initials = user.name.split(' ').map(part => part[0]).slice(0, 2).join('');
   function navigation(compact: boolean, mobile = false) {
     return <nav aria-label={mobile ? 'Mobile workspace navigation' : 'Workspace navigation'} className="space-y-2">
@@ -45,6 +47,7 @@ export function AppShell() {
         <ClipboardList aria-hidden="true" className="size-5 shrink-0" /><span className={compact ? 'sr-only' : ''}>Manufacturing jobs</span>
       </NavLink>}
       {isBuyer && <NavLink to="/buyer/orders" onClick={() => setMobileOpen(false)} title={compact ? 'Manufacturing orders' : undefined} className={({ isActive }) => cn('flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors', isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted', compact && 'justify-center px-0')}><Package aria-hidden="true" className="size-5 shrink-0" /><span className={compact ? 'sr-only' : ''}>Manufacturing orders</span></NavLink>}
+      {isWorkshop && workshopNavigation.map(({ path, label }) => <NavLink key={path} to={path} onClick={() => setMobileOpen(false)} title={compact ? label : undefined} className={({ isActive }) => cn('flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors', isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted', compact && 'justify-center px-0')}><ClipboardList aria-hidden="true" className="size-5 shrink-0" /><span className={compact ? 'sr-only' : ''}>{label}</span></NavLink>)}
       {isInspector && [['/inspector/inspections', 'Assigned inspections'], ['/inspector/rework', 'Rework follow-up'], ['/inspector/history', 'Inspection history']].map(([path, label]) => <NavLink key={path} to={path!} onClick={() => setMobileOpen(false)} title={compact ? label : undefined} className={({ isActive }) => cn('flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors', isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted', compact && 'justify-center px-0')}><ClipboardList aria-hidden="true" className="size-5 shrink-0" /><span className={compact ? 'sr-only' : ''}>{label}</span></NavLink>)}
       {isAdmin && [{ path: 'users', label: 'Users', Icon: Users }, { path: 'workshops', label: 'Workshops', Icon: Factory }, { path: 'jobs', label: 'Manufacturing jobs', Icon: ClipboardList }, { path: 'orders', label: 'Manufacturing orders', Icon: Package }, { path: 'quality', label: 'Quality operations', Icon: ShieldCheck }].map(({ path, label, Icon }) => <NavLink key={path} to={'/admin/' + path} onClick={() => setMobileOpen(false)} title={compact ? label : undefined} className={({ isActive }) => cn('flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors', isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted', compact && 'justify-center px-0')}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className={compact ? 'sr-only' : ''}>{label}</span></NavLink>)}
       <Link to="/foundation" onClick={() => setMobileOpen(false)} title={compact ? 'Shared foundation' : undefined} className={cn('flex min-h-11 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted', compact && 'justify-center px-0')}>

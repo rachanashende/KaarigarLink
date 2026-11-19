@@ -1,4 +1,4 @@
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter } from 'react-router'
 import { DemoAuthProvider } from './context/DemoAuthProvider'
 import { WorkshopDataProvider } from './context/WorkshopDataProvider'
 import AppRoutes from './routes/AppRoutes'

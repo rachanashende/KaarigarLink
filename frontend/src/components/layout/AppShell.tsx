@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router'
 import { useWorkshopData } from '../../hooks/useWorkshopData'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -33,10 +33,10 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
 }
 
 const navItems: { to: string; label: string; icon: IconName }[] = [
-  { to: '/', label: 'Dashboard', icon: 'grid' },
-  { to: '/invitations', label: 'Invitations', icon: 'briefcase' },
-  { to: '/orders', label: 'My Orders', icon: 'clipboard' },
-  { to: '/workspace', label: 'Workshop Profile', icon: 'layers' },
+  { to: '/workshop/dashboard', label: 'Dashboard', icon: 'grid' },
+  { to: '/workshop/invitations', label: 'Invitations', icon: 'briefcase' },
+  { to: '/workshop/orders', label: 'My Orders', icon: 'clipboard' },
+  { to: '/workshop/profile', label: 'Workshop Profile', icon: 'layers' },
 ]
 
 export default function AppShell() {
@@ -54,7 +54,7 @@ export default function AppShell() {
     <div className={`app-shell${mobileOpen ? ' mobile-open' : ''}`}>
       {mobileOpen && <button className="mobile-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
       <aside className={`sidebar${mobileOpen ? ' sidebar-open' : ''}`}>
-        <NavLink className="brand" to="/" aria-label="KaarigarLink dashboard">
+        <NavLink className="brand" to="/workshop/dashboard" aria-label="KaarigarLink dashboard">
           <span className="brand-mark">K</span>
           <span>Kaarigar<span>Link</span></span>
         </NavLink>
@@ -65,7 +65,7 @@ export default function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === '/workshop/dashboard'}
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               onClick={() => setMobileOpen(false)}
             >
@@ -76,7 +76,7 @@ export default function AppShell() {
         </nav>
 
         <div className="sidebar-footer">
-          <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={() => setMobileOpen(false)}>
+          <NavLink to="/workshop/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={() => setMobileOpen(false)}>
             <Icon name="settings" />
             <span>Settings</span>
           </NavLink>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { loadOnboardingStore, saveOnboardingDraft, submitWorkshopRegistration } from '../../services/onboardingStorage'
 import type { OnboardingDraft } from '../../types/onboarding'
 
@@ -18,7 +18,7 @@ type Field = {
 
 const stepNames = ['Basic information', 'Location', 'Capabilities', 'Business information', 'Review and submit']
 
-const stepFields: Field[][] = [
+const stepFields: [Field[], Field[], Field[], Field[]] = [
   [
     { name: 'workshopName', label: 'Workshop name', required: true, placeholder: 'e.g. Precision Works' },
     { name: 'ownerName', label: 'Owner name', required: true, placeholder: 'Full name' },
@@ -58,7 +58,7 @@ const reviewSections: Array<{ title: string; step: number; fields: Field[] }> = 
 
 function validateStep(step: number, draft: OnboardingDraft) {
   const errors: Partial<Record<FieldName, string>> = {}
-  for (const field of stepFields[step]) {
+  for (const field of stepFields[step] ?? []) {
     const value = draft[field.name].trim()
     if (field.required && !value) {
       errors[field.name] = `${field.label} is required.`
@@ -97,7 +97,11 @@ export default function WorkshopOnboardingPage() {
   function changeField(name: FieldName, value: string) {
     const updated = { ...draft, [name]: value }
     setDraft(updated)
-    setErrors((previous) => ({ ...previous, [name]: undefined }))
+    setErrors((previous) => {
+      const next = { ...previous }
+      delete next[name]
+      return next
+    })
     if (!saveOnboardingDraft(updated, currentStep)) {
       setNotice({ type: 'error', message: 'Progress could not be saved in this browser. Check storage settings and try again.' })
     }
@@ -253,7 +257,7 @@ export default function WorkshopOnboardingPage() {
 
           {currentStep < 4 ? (
             <div className="onboarding-fields">
-              {stepFields[currentStep].map(renderField)}
+              {stepFields[currentStep]?.map(renderField)}
             </div>
           ) : (
             <div className="onboarding-review">

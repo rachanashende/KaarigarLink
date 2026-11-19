@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { useWorkshopData } from '../../hooks/useWorkshopData'
 import type { InvitationStatus } from '../../types/workshop'
 import QuoteSubmissionForm from '../../components/quotes/QuoteSubmissionForm'
@@ -70,13 +70,13 @@ export default function InvitationsPage() {
     if (!selectedInvitation) {
       return (
         <section className="panel detail-panel">
-          <div className="empty-state"><h2>Invitation not found</h2><p>It may have been removed from this demo workspace.</p><Link className="text-button" to="/invitations">Back to invitations</Link></div>
+          <div className="empty-state"><h2>Invitation not found</h2><p>It may have been removed from this demo workspace.</p><Link className="text-button" to="/workshop/invitations">Back to invitations</Link></div>
         </section>
       )
     }
     return (
       <>
-        <button className="back-button" onClick={() => navigate('/invitations')}>← Back to invitations</button>
+        <button className="back-button" onClick={() => navigate('/workshop/invitations')}>← Back to invitations</button>
         <div className="page-heading detail-heading">
           <div>
             <p className="eyebrow">{selectedInvitation.id} · RECEIVED {dateFormat.format(new Date(`${selectedInvitation.receivedAt}T00:00:00`)).toUpperCase()}</p>
@@ -141,7 +141,7 @@ export default function InvitationsPage() {
           <div className="quote-form-wrap">
             <QuoteSubmissionForm
               invitation={selectedInvitation}
-              existingQuote={editingQuote ? currentQuote : undefined}
+              {...(editingQuote && currentQuote ? { existingQuote: currentQuote } : {})}
               onCancel={() => setShowQuoteForm(false)}
               onSaved={(quote) => {
                 setQuotes(loadDemoQuotes())
@@ -187,7 +187,7 @@ export default function InvitationsPage() {
                   <span><small>Deadline</small><strong>{dateFormat.format(new Date(`${invitation.deadline}T00:00:00`))}</strong></span>
                 </div>
                 <div className="invitation-actions">
-                  <Link className="secondary-button" to={`/invitations/${invitation.id}`}>View details <span>→</span></Link>
+                  <Link className="secondary-button" to={`/workshop/invitations/${invitation.id}`}>View details <span>→</span></Link>
                   {invitation.status === 'New' && <>
                     <button className="primary-button" onClick={() => acceptInvitation(invitation.id)}>Accept</button>
                     <button className="quiet-button" onClick={() => reject(invitation.id)}>Reject</button>
