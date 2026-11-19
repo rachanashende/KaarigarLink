@@ -1,0 +1,59 @@
+@import '@fontsource-variable/public-sans';
+@import 'tailwindcss';
+
+:root {
+  font-family: 'Public Sans Variable', sans-serif;
+  color: var(--foreground);
+  background: var(--background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --background: #f3f6f8;
+  --foreground: #182e3e;
+  --card: #ffffff;
+  --card-foreground: #182e3e;
+  --primary: #204d6b;
+  --primary-foreground: #ffffff;
+  --secondary: #e5edf2;
+  --secondary-foreground: #204d6b;
+  --muted: #e5edf2;
+  --muted-foreground: #4c6070;
+  --accent: #f5b942;
+  --accent-foreground: #182e3e;
+  --destructive: #b42318;
+  --border: #cbd6df;
+  --input: #768b9b;
+  --ring: #236b96;
+  --radius: 0.5rem;
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+@layer base {
+  * { border-color: var(--border); }
+  body { margin: 0; min-width: 320px; }
+  button, a, input, select, textarea { touch-action: manipulation; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+  ::selection { background: var(--accent); color: var(--foreground); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+}
+body:has(dialog[open]) { overflow: hidden; }
