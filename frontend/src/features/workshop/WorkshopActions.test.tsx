@@ -1,0 +1,77 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
+import { AppProviders } from '@/app/App';
+import { AppRoutes } from '@/app/router';
+import { createMockService } from '@/services/adapters/mock';
+import { createMockStore } from '@/services/mock/store';
+import { fixtures } from '@/services/mock/fixtures';
+import { createMockAuthService, MOCK_SESSION_KEY } from '@/services/adapters/mockAuth';
+import * as calendar from '@/services/jobs';
+
+beforeEach(() => { sessionStorage.clear(); vi.spyOn(calendar, 'todayInIndia').mockReturnValue('2026-11-19'); });
+async function setup() {
+  const store = createMockStore(fixtures); const service = createMockService(store);
+  const invitation = await service.buyer.inviteWorkshop('buyer-1', 'job-1', 'workshop-3');
+  sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify({ version: 1, userId: 'workshop-user-3', expiresAt: Date.now() + 60000 }));
+  render(<MemoryRouter initialEntries={['/workshop/invitations/' + invitation.id]}><AppProviders services={{ data: service, auth: createMockAuthService(service) }}><AppRoutes /></AppProviders></MemoryRouter>);
+  await screen.findByRole('heading', { name: 'Invitation response and quotation' });
+  return { store, service, invitation, user: userEvent.setup() };
+}
+it('requires confirmation, handles native cancellation and shares an accepted response with Buyer', async () => {
+  const { service, user, store } = await setup(); const before = store.snapshot();
+  await user.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(store.snapshot()).toEqual(before);
+  await user.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Accept invitation' }));
+  expect(await screen.findByText('Mock invitation accepted.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Accept invitation' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Submit quote' })).toBeEnabled();
+  expect((await service.buyer.getMatches('buyer-1', 'job-1')).results.find(row => row.workshop.id === 'workshop-3')!.invitation!.status).toBe('ACCEPTED');
+  expect(store.snapshot().orders).toEqual(before.orders);
+});
+it('validates, submits, edits and withdraws the canonical quote without lifecycle side effects', async () => {
+  const { user, service, store } = await setup(); const before = store.snapshot();
+  await user.click(screen.getByRole('button', { name: 'Accept invitation' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Accept invitation' }));
+  await screen.findByText('Mock invitation accepted.');
+  await user.click(screen.getByRole('button', { name: 'Submit quote' }));
+  await user.click(screen.getByRole('button', { name: 'Review mock quotation' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Quoted total (INR)')).toHaveAttribute('aria-invalid', 'true');
+  await user.clear(screen.getByLabelText('Quoted total (INR)')); await user.type(screen.getByLabelText('Quoted total (INR)'), '55000');
+  await user.type(screen.getByLabelText('Estimated delivery'), '2026-12-13');
+  await user.type(screen.getByLabelText(/Quotation notes/), 'Component workflow quotation');
+  await user.click(screen.getByRole('button', { name: 'Review mock quotation' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Submit quotation' }));
+  expect(await screen.findByText('Mock quotation submitted.')).toBeVisible();
+  expect(store.snapshot().quotes.filter(row => row.workshopId === 'workshop-3')).toHaveLength(1);
+  await user.click(screen.getByRole('button', { name: 'Edit quote' }));
+  await user.clear(screen.getByLabelText('Quoted total (INR)')); await user.type(screen.getByLabelText('Quoted total (INR)'), '56000');
+  await user.click(screen.getByRole('button', { name: 'Review mock quotation' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save quotation changes' }));
+  expect(await screen.findByText('Mock quotation updated.')).toBeVisible();
+  expect(store.snapshot().quotes.find(row => row.workshopId === 'workshop-3')!.amount).toBe(56000);
+  await user.click(screen.getByRole('button', { name: 'Withdraw quote' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Withdraw quotation' }));
+  expect(await screen.findByText('Mock quotation withdrawn.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Edit quote' })).toBeDisabled();
+  const buyer = await service.buyer.getQuotes('buyer-1', 'job-1');
+  expect(JSON.stringify(buyer)).toContain('WITHDRAWN');
+  expect(store.snapshot().orders).toEqual(before.orders); expect(store.snapshot().inspections).toEqual(before.inspections);
+  expect(store.snapshot().payments).toEqual(before.payments);
+});
+it('keeps pending responses disabled and reports the real failure without a successful write', async () => {
+  const { user, service, store } = await setup(); const before = store.snapshot();
+  let fail!: (error: Error) => void;
+  vi.spyOn(service.workshop, 'respondToInvitation').mockImplementation(() => new Promise((_, reject) => { fail = reject; }));
+  await user.click(screen.getByRole('button', { name: 'Decline invitation' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Decline invitation' }));
+  expect(within(screen.getByRole('dialog')).getByRole('button', { name: /Please wait/ })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Accept invitation' })).toBeDisabled();
+  fail(new Error('Storage unavailable. No response was saved.'));
+  await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('Storage unavailable. No response was saved.'));
+  expect(store.snapshot()).toEqual(before); expect(service.workshop.respondToInvitation).toHaveBeenCalledTimes(1);
+});

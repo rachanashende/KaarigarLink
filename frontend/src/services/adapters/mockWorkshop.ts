@@ -1,24 +1,11 @@
-import type { Collections, Inspection, Invitation, Order, Quote, User, Workshop } from '@/types';
+import { identity, one } from './mockWorkshopAccess';
+import { createMockWorkshopCommands } from './mockWorkshopCommands';
+import { invitationActions, quotationActions } from '../workshopCommands';
+import type { Collections, Inspection, Invitation, Order, Quote, Workshop } from '@/types';
 import { ServiceError } from '../contracts';
 import type { MockStore } from '../mock/store';
 import type { WorkshopBuyer, WorkshopInspection, WorkshopInvitationData, WorkshopJob, WorkshopOrderData, WorkshopService } from '../workshop';
 
-function one<T>(rows: T[]): T {
-  if (rows.length !== 1) throw new ServiceError('SERVER', 'Workshop records contain incomplete or ambiguous references. Reset demo data or correct the shared source.');
-  return rows[0]!;
-}
-function identity(state: Collections, actor: string) {
-  const users = state.users.filter(user => user.id === actor);
-  if (!users.length) throw new ServiceError('UNAUTHORIZED', 'Sign in to view your workshop.');
-  const user = one(users);
-  if (user.role !== 'workshop') throw new ServiceError('FORBIDDEN', 'A workshop account is required.');
-  const profiles = state.workshops.filter(profile => profile.ownerId === user.id);
-  if (profiles.length > 1) throw new ServiceError('CONFLICT', 'This account has multiple workshop profiles. Resolve the ownership mapping before continuing.');
-  const profile = profiles[0] ?? null;
-  if (profile) one(state.workshops.filter(row => row.id === profile.id));
-  return { account: accountView(user), profile };
-}
-function accountView({ id, name, email, role }: User): User { return { id, name, email, role }; }
 function profileView(item: Workshop): Workshop {
   return {
     id: item.id, ownerId: item.ownerId, name: item.name,
@@ -49,6 +36,7 @@ function invitationView(state: Collections, item: Invitation): WorkshopInvitatio
   one(state.invitations.filter(row => row.id === item.id));
   const { id, jobId, workshopId, status } = item;
   return { invitation: { id, jobId, workshopId, status }, ...jobView(state, jobId),
+    actions: invitationActions(state, item),
     quotes: state.quotes.filter(quote => quote.jobId === jobId && quote.workshopId === workshopId).map(quote => {
       one(state.quotes.filter(row => row.id === quote.id)); return quoteView(quote);
     }),
@@ -97,12 +85,13 @@ function orderView(state: Collections, item: Order): WorkshopOrderData {
 }
 export function createMockWorkshop(store: MockStore): WorkshopService {
   return {
+    ...createMockWorkshopCommands(store),
     async getWorkspace(actor) {
       const state = store.snapshot(); const { account, profile } = identity(state, actor);
       const invitations = profile ? state.invitations.filter(row => row.workshopId === profile.id).map(row => invitationView(state, row)) : [];
       const quotations = profile ? state.quotes.filter(row => row.workshopId === profile.id).map(row => {
         one(state.quotes.filter(quote => quote.id === row.id));
-        return { quote: quoteView(row), ...jobView(state, row.jobId) };
+        return { quote: quoteView(row), ...jobView(state, row.jobId), actions: quotationActions(state, row) };
       }) : [];
       const orders = profile ? state.orders.filter(row => row.workshopId === profile.id).map(row => orderView(state, row)) : [];
       const inspections = orders.flatMap(row => row.inspections);

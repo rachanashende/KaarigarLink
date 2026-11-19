@@ -1,5 +1,6 @@
+import * as calendar from '@/services/jobs';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { AppProviders } from '@/app/App';
@@ -30,6 +31,7 @@ const legacyStorage = {
   get length() { return legacyData.size; },
 };
 beforeEach(() => {
+  vi.spyOn(calendar, 'todayInIndia').mockReturnValue('2026-11-19');
   sessionStorage.clear();
   legacyData.clear();
   for (const method of [legacyStorage.getItem, legacyStorage.setItem, legacyStorage.removeItem, legacyStorage.clear]) method.mockClear();
@@ -41,7 +43,7 @@ function setup(path: string, actor: string | null = 'workshop-user-1') {
   render(<MemoryRouter initialEntries={[path]}><AppProviders services={{ data, auth: createMockAuthService(data) }}><AppRoutes /></AppProviders></MemoryRouter>);
   return userEvent.setup();
 }
-it.each(routes)('renders guarded %s without loading standalone records or enabling writes', async (path, title) => {
+it.each(routes)('renders guarded %s without loading standalone records or writing during rendering', async (path, title) => {
   for (const key of legacyKeys) window.localStorage.setItem(key, 'corrupt private standalone records');
   const read = legacyStorage.getItem;
   const write = legacyStorage.setItem;
@@ -50,9 +52,14 @@ it.each(routes)('renders guarded %s without loading standalone records or enabli
   expect(await screen.findByRole('heading', { name: title, level: 1 })).toBeVisible();
   expect(screen.getAllByRole('main')).toHaveLength(1);
   expect(screen.getByRole('region', { name: 'Workshop integration status' })).toHaveTextContent('Ravi Patil');
-  expect(screen.getByRole('heading', { name: 'Workshop actions are disabled' })).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'Workshop workflow availability' })).toBeVisible();
   for (const name of ['Rohan Sharma', 'Precision Works', 'Apex Components']) expect(screen.queryByText(name, { exact: true })).not.toBeInTheDocument();
-  for (const button of within(screen.getByRole('main')).queryAllByRole('button')) expect(button).toBeDisabled();
+  await waitFor(() => expect(screen.queryByText('Loading shared workshop records...')).not.toBeInTheDocument());
+  for (const button of within(screen.getByRole('main')).queryAllByRole('button')) {
+    const row = button.closest('tr');
+    const supportedQuote = path === '/workshop/invitations' && row && within(row).queryByText('quote-1', { exact: true }) && ['Edit quote', 'Withdraw quote'].includes(button.textContent ?? '');
+    if (supportedQuote) expect(button).toBeEnabled(); else expect(button).toBeDisabled();
+  }
   expect(read.mock.calls.filter(([key]) => legacyKeys.includes(key))).toHaveLength(0);
   expect(write).not.toHaveBeenCalled();
   expect(legacyStorage.removeItem).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import * as calendar from '@/services/jobs';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,7 +11,7 @@ import { fixtures } from '@/services/mock/fixtures';
 import { DEMO_DATA_KEY } from '@/services/mock/persistence';
 import { createMockAuthService, MOCK_SESSION_KEY } from '@/services/adapters/mockAuth';
 
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => { sessionStorage.clear(); vi.spyOn(calendar, 'todayInIndia').mockReturnValue('2026-11-19'); });
 function setup(path: string, service = createMockService(), actor = 'workshop-user-1') {
   sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify({ version: 1, userId: actor, expiresAt: Date.now() + 60000 }));
   render(<MemoryRouter initialEntries={[path]}><AppProviders services={{ data: service, auth: createMockAuthService(service) }}><AppRoutes /></AppProviders></MemoryRouter>);
@@ -42,7 +43,8 @@ it('links canonical invitations to real job briefs and only the workshop own quo
   expect(await screen.findByText('Buyer budget')).toBeVisible();
   expect(screen.getByText('₹60,000.00')).toBeVisible();
   expect(screen.getByRole('table', { name: 'Workshop quotation history' })).toHaveTextContent('₹58,000.00');
-  for (const label of ['Accept invitation', 'Decline invitation', 'Submit quote', 'Edit quote', 'Withdraw quote']) expect(screen.getByRole('button', { name: label })).toBeDisabled();
+  for (const label of ['Accept invitation', 'Decline invitation', 'Submit quote']) expect(screen.getByRole('button', { name: label })).toBeDisabled();
+  for (const label of ['Edit quote', 'Withdraw quote']) expect(screen.getByRole('button', { name: label })).toBeEnabled();
 });
 it('presents actual production, submitted rework and payment information separately', async () => {
   setup('/workshop/orders/order-production');

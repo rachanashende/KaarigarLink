@@ -17,3 +17,9 @@ This section supersedes the routing-only data-unavailable statements above. Work
 The service resolves exact User.id/Workshop.ownerId, returns only owned joins, rejects ambiguous/broken references and masks private/missing detail IDs alike. No profile produces an onboarding-required state. No unsafe casts, standalone provider, local identity or legacy storage migration is used. Query keys include the actor ID; shared reset and persistence remain the only dataset mechanism.
 
 All writes remain disabled. Source mappings and service/privacy boundaries are documented in repository-root docs/phase-8b2-workshop-contracts.md. Existing shared tokens/components are reused without a redesign.
+
+## Phase 8B.3 local workflows (current)
+
+WorkshopActions activates only confirmed invitation accept/decline and quote submit/edit/withdraw through the shared WorkshopService. Canonical ownership, relationships, latest state, strict fields, delivery/amount validation, duplicate/stale handling and persistence rollback are service responsibilities. WorkshopRecords renders action availability/reasons from the same scoped selector; cache invalidation refreshes all role reads. Existing authentication/shell/router and design tokens remain.
+
+No order, production, QC, payment, profile, settings or onboarding mutation is activated. Legacy standalone handlers remain inactive. See repository-root docs/phase-8b3-contract-matrix.md for the policy and missing contracts, and docs/phase-8b3-verification.md for actual checks and evidence. Earlier sections describe their historical phases.

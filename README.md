@@ -47,3 +47,9 @@ See [Phase 8B.1 verification](docs/phase-8b1-verification.md) and [workshop boun
 ## Workshop shared data: Phase 8B.2
 
 Workshop routes now show owner-scoped canonical dashboard metrics, invitations/job briefs/quotation history, assigned orders/milestones/submitted QC/rework, profile/capacity, account information and onboarding linkage. All workshop business writes remain disabled; no standalone provider, fixtures or storage is activated. See [read contracts and domain mapping](docs/phase-8b2-workshop-contracts.md) and [Phase 8B.2 verification](docs/phase-8b2-verification.md). The Phase 8B.1 notes above describe the preceding routing-only state.
+
+## Workshop workflows: Phase 8B.3
+
+Owned invitation accept/decline and quotation submit/edit/withdraw are now confirmed, validated local mock commands over the existing shared store. Buyer comparison and Admin oversight see the same Quote records. The preceding Phase 8B.1/8B.2 sections describe historical states; the workshop placeholder statement no longer applies on this integration branch.
+
+Buyer award, order creation, production/rework/QC submission, workshop payment/closure, profile/settings/onboarding writes remain disabled pending compatible contracts. No backend endpoint, standalone provider, dependency or shared entity change was introduced. See the [command compatibility matrix](docs/phase-8b3-contract-matrix.md) and [verification report](docs/phase-8b3-verification.md) for exact scope, tests and limits.

@@ -16,8 +16,8 @@ const sections: Record<WorkshopSection, { title: string; description: string; ac
   },
   invitations: {
     title: 'Invitations',
-    description: 'Read invitations and quotations addressed to your canonical workshop. Responses and quotation changes remain disabled; order creation requires buyer award.',
-    actions: ['Accept invitation', 'Decline invitation', 'Submit quote', 'Edit quote', 'Withdraw quote'],
+    description: 'Read invitations and quotations addressed to your canonical workshop. Invitation responses and quotation changes are local mock simulations only; order creation still requires buyer award.',
+    actions: [],
   },
   orders: {
     title: 'My orders',
@@ -51,8 +51,8 @@ export function WorkshopPage({ section = 'dashboard' }: { section?: WorkshopSect
   return <div className="space-y-6" data-workshop-workspace>
     <PageHeader title={detail ? (section === 'invitations' ? 'Invitation details' : 'Order details') : page.title} description={page.description} />
     <section aria-label="Workshop integration status" className="rounded-lg border bg-card p-5 sm:p-6">
-      <h2 className="font-semibold">Workshop actions are disabled</h2>
-      <p id="workshop-disabled-reason" className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Shared records are read-only. Workshop changes require approved workflow commands. This workspace does not read or change the separate workshop demo records.</p>
+      <h2 className="font-semibold">Workshop workflow availability</h2>
+      <p id="workshop-disabled-reason" className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Invitation responses and supported quotation changes are local mock simulations. Production, QC, payment and account writes remain unavailable pending compatible contracts. No standalone workshop demo store is used.</p>
       <p className="mt-3 text-sm text-muted-foreground">Signed in as {user?.name} through your shared KaarigarLink session.</p>
       {page.actions.length > 0 && <fieldset disabled aria-describedby="workshop-disabled-reason" className="mt-5">
         <legend className="mb-3 text-sm font-medium">Unavailable actions</legend>

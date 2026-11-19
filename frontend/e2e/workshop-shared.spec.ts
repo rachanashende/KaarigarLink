@@ -32,7 +32,8 @@ test('canonical workshop metrics, invitation detail, own quote history and accou
   await expect(page.getByRole('heading', { name: 'Invitation details', level: 1, exact: true })).toBeVisible();
   await expect(page.locator('dd').filter({ hasText: /^Machine aluminium mounting brackets$/ })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Workshop quotation history' })).toContainText('₹58,000.00');
-  for (const name of ['Accept invitation', 'Decline invitation', 'Submit quote', 'Edit quote', 'Withdraw quote']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+  for (const name of ['Accept invitation', 'Decline invitation', 'Submit quote']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+  for (const name of ['Edit quote', 'Withdraw quote']) await expect(page.getByRole('button', { name, exact: true })).toBeEnabled();
   await page.goto('/workshop/profile');
   await expect(page.getByRole('table', { name: 'Published workshop capacity' })).toContainText('500 pieces');
   await expect(page.getByRole('table', { name: 'Workshop machinery' })).toContainText('3-axis CNC mill');
@@ -124,7 +125,7 @@ test('shared workshop screens remain readable at desktop and mobile widths', asy
       ['orders', 'orders'], ['order-detail', 'orders/order-production'], ['profile', 'profile'], ['settings', 'settings'], ['onboarding', 'onboarding'],
     ]) {
       await page.goto('/workshop/' + path);
-      await expect(page.getByRole('heading', { name: 'Workshop actions are disabled', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Workshop workflow availability', exact: true })).toBeVisible();
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
       if (width === 390 && ['invitations', 'orders'].includes(name!)) expect(await page.getByLabel('Search ' + name).evaluate(element => element.clientWidth)).toBeGreaterThan(300);

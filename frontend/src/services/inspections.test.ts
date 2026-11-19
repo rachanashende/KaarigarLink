@@ -120,7 +120,7 @@ it.each(['reason', 'correctiveAction', 'deadline', 'invalid-date', 'failure', 'f
 it('migrates the Phase 4 envelope, persists drafts/decisions through the same key and resets QC', async () => {
   const original = createMockService(createMockStore(fixtures, sessionStorage));
   await original.buyer.submitReview('buyer-1', 'order-closed', { rating: 5, comment: 'Synthetic review preserved through migration.' });
-  const v1 = JSON.parse(sessionStorage.getItem(DEMO_DATA_KEY)!); delete v1.inspectionUpdates; v1.version = 1;
+  const v1 = JSON.parse(sessionStorage.getItem(DEMO_DATA_KEY)!); delete v1.inspectionUpdates; delete v1.quotes; v1.version = 1;
   sessionStorage.setItem(DEMO_DATA_KEY, JSON.stringify(v1));
   let service = createMockService(createMockStore(fixtures, sessionStorage));
   expect((await service.buyer.getOrder('buyer-1', 'order-closed')).review?.rating).toBe(5);

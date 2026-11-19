@@ -104,9 +104,9 @@ it('shows actual payment simulation records without inferring payment from lifec
   expect((await service.workshop.getOrder('workshop-user-1', 'order-production')).payments).toEqual([{ id: 'payment-1', orderId: 'order-production', simulationStatus: 'SIMULATED_FAILED' }]);
   expect((await service.workshop.getWorkspace('workshop-user-2')).orders).toEqual([]);
 });
-it('returns detached read models and exposes no workshop mutation methods', async () => {
+it('returns detached read models and exposes only scoped invitation and quotation commands', async () => {
   const { store, service } = setup(); const before = store.snapshot();
-  expect(Object.keys(service.workshop).sort()).toEqual(['getInvitation', 'getOrder', 'getWorkspace']);
+  expect(Object.keys(service.workshop).sort()).toEqual(['editQuote', 'getInvitation', 'getOrder', 'getWorkspace', 'respondToInvitation', 'submitQuote', 'withdrawQuote']);
   const data = await service.workshop.getWorkspace('workshop-user-1');
   data.profile!.machines[0]!.name = 'changed'; data.orders[0]!.order.status = 'PAID';
   data.invitations[0]!.job.title = 'changed';

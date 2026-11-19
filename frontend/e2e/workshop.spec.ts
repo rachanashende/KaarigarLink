@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => { await page.clock.setFixedTime(new Date('2026-11-19T08:00:00.000Z')); });
+
 const pages = [
   ['dashboard', 'Workshop workspace'],
   ['invitations', 'Invitations'],
@@ -29,7 +31,11 @@ test('shared workshop login, canonical routing, disabled actions and isolated le
     await expect(page.getByRole('heading', { name: title, level: 1, exact: true })).toBeVisible();
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('region', { name: 'Workshop integration status' })).toContainText('Ravi Patil');
-    for (const button of await page.getByRole('main').getByRole('button').all()) await expect(button).toBeDisabled();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    for (const button of await page.getByRole('main').getByRole('button').all()) {
+      const allowed = await button.evaluate(element => ['Edit quote', 'Withdraw quote'].includes(element.textContent ?? '') && [...(element.closest('tr')?.querySelectorAll('td') ?? [])].some(cell => cell.textContent === 'quote-1'));
+      if (allowed) await expect(button).toBeEnabled(); else await expect(button).toBeDisabled();
+    }
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--primary'))).toBe(primary);
   }
   expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), legacyKeys)).toEqual(legacyKeys.map(() => 'corrupt standalone private data'));

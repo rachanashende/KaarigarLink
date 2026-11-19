@@ -68,7 +68,7 @@ it('restores reviews, invitations and posted jobs across stores; never persists 
   const job = await service.buyer.createJob('buyer-1', { title: 'Persisted sample', description: 'Synthetic job', capability: 'Milling', material: 'Steel', specification: '', quantity: 10, unit: 'pieces', processes: ['Milling'], deadline: '2099-01-01', location: { city: 'Pune', state: 'Maharashtra' }, designFiles: [{ id: 'f', name: 'private-drawing.pdf', mediaType: 'application/pdf', sizeBytes: 12 }] });
   const raw = sessionStorage.getItem(DEMO_DATA_KEY)!;
   expect(raw).not.toContain('private-drawing'); expect(raw).not.toContain('DemoPass'); expect(raw).not.toContain('@kaarigarlink.example');
-  expect(Object.keys(JSON.parse(raw)).sort()).toEqual(['auditEvents', 'inspectionUpdates', 'invitations', 'jobs', 'reviews', 'version']);
+  expect(Object.keys(JSON.parse(raw)).sort()).toEqual(['auditEvents', 'inspectionUpdates', 'invitations', 'jobs', 'quotes', 'reviews', 'version']);
   const restored = createMockService(createMockStore(fixtures, sessionStorage));
   expect((await restored.buyer.getOrder('buyer-1', 'order-closed')).review?.rating).toBe(5);
   expect((await restored.buyer.getJob('buyer-1', job.id)).designFiles).toEqual([]);

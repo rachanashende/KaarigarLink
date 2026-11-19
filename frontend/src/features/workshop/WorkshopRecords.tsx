@@ -1,3 +1,4 @@
+import { WorkshopInvitationActions, WorkshopQuoteActions } from './WorkshopActions';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { DataTable } from '@/components/DataTable';
@@ -36,6 +37,7 @@ function Quotes({ rows }: { rows: WorkshopQuotationData[] }) {
     { key: 'date', header: 'Estimated delivery', cell: row => <span className="whitespace-nowrap">{dateLabel(row.quote.estimatedDelivery)}</span> },
     { key: 'status', header: 'Quotation status', cell: row => <State value={row.quote.status} /> },
     { key: 'notes', header: 'Notes', cell: row => <p className="min-w-52">{row.quote.notes || 'Not supplied'}</p> },
+    { key: 'commands', header: 'Local mock commands', cell: row => <WorkshopQuoteActions row={row} /> },
   ]} />;
 }
 function Invitations({ rows }: { rows: WorkshopInvitationData[] }) {
@@ -104,7 +106,7 @@ export function WorkshopRecords({ data, section, invitationId, orderId }: { data
   const profile = data.profile;
   if (invitationId) {
     const row = data.invitations.find(item => item.invitation.id === invitationId);
-    return row ? <div className="space-y-6"><Facts rows={[[ 'Invitation ID', row.invitation.id ], ['Invitation status', <State value={row.invitation.status} />], ['Buyer', row.buyer.name], ['Workshop ID', row.invitation.workshopId]]} /><JobDetails job={row.job} /><Quotes rows={row.quotes.map(quote => ({ quote, job: row.job, buyer: row.buyer }))} /></div> : <EmptyState title="Invitation unavailable" description="This invitation does not exist or is not addressed to your workshop." />;
+    return row ? <div className="space-y-6"><Facts rows={[[ 'Invitation ID', row.invitation.id ], ['Invitation status', <State value={row.invitation.status} />], ['Buyer', row.buyer.name], ['Workshop ID', row.invitation.workshopId]]} /><JobDetails job={row.job} /><WorkshopInvitationActions row={row} /><Quotes rows={data.quotations.filter(item => item.quote.jobId === row.job.id)} /></div> : <EmptyState title="Invitation unavailable" description="This invitation does not exist or is not addressed to your workshop." />;
   }
   if (orderId) {
     const row = data.orders.find(item => item.order.id === orderId);
