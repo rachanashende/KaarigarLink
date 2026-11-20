@@ -1,7 +1,8 @@
 # KaarigarLink API Contract
 
 Base URL (local): `http://localhost:4000/api`
-Base URL (deployed): `https://<render-service>.onrender.com/api` *(filled in after first deploy)*
+Hosting: not deployed. The project currently runs locally only; external hosting is postponed.
+Local setup, environment variables and the smoke test: see [README.md](../README.md).
 
 Status legend: ✅ live · 🚧 planned (contract fixed, implementation pending)
 
