@@ -82,7 +82,11 @@ export async function getJobById(user: AuthUser, id: string) {
   if (user.role === 'BUYER' && job.buyerId === user.id) return job;
   if (user.role === 'WORKSHOP') {
     const invited = await prisma.jobInvitation.count({ where: { jobId: id, workshop: { userId: user.id } } });
-    if (invited > 0) return job;
+    if (invited > 0) {
+      // Workshops must not learn how many competitors were invited (no _count for them).
+      const { _count: _hiddenFromWorkshops, ...workshopVisible } = job;
+      return workshopVisible;
+    }
   }
   throw jobNotFound();
 }

@@ -200,14 +200,27 @@ describe('GET /api/jobs/:id', () => {
     expect((await request(app).get(`/api/jobs/${job.id}`).set(auth(adminToken))).status).toBe(200);
   });
 
-  it('lets an invited workshop view the job', async () => {
+  it('lets an invited workshop view the job, without revealing how many workshops were invited', async () => {
     const job = await createJob(buyerA.token);
-    await prisma.jobInvitation.create({
-      data: { jobId: job.id, workshopId: workshop.workshopId, matchScore: 80, scoreBreakdown: {}, matchReasons: [], rank: 1 },
-    });
+    const competitor = await registerUser('WORKSHOP');
+    for (const workshopId of [workshop.workshopId, competitor.user.workshop.id]) {
+      await prisma.jobInvitation.create({
+        data: { jobId: job.id, workshopId, matchScore: 80, scoreBreakdown: {}, matchReasons: [], rank: 1 },
+      });
+    }
     const res = await request(app).get(`/api/jobs/${job.id}`).set(auth(workshop.token));
     expect(res.status).toBe(200);
-    expect(res.body.data.job._count.invitations).toBe(1);
+    // Competitor count is hidden from workshops; every other job field is still there.
+    expect(res.body.data.job).not.toHaveProperty('_count');
+    expect(JSON.stringify(res.body)).not.toMatch(/_count|invitations/);
+    expect(res.body.data.job).toMatchObject({ id: job.id, buyerId: buyerA.id, title: expect.any(String), buyer: { id: buyerA.id } });
+    expect(res.body.data.job.requirements).toHaveLength(3);
+
+    // The owning buyer (and admins) still get the count.
+    const asBuyer = await request(app).get(`/api/jobs/${job.id}`).set(auth(buyerA.token));
+    expect(asBuyer.body.data.job._count.invitations).toBe(2);
+    const asAdmin = await request(app).get(`/api/jobs/${job.id}`).set(auth(adminToken));
+    expect(asAdmin.body.data.job._count.invitations).toBe(2);
   });
 
   it('returns 404 for an unknown id', async () => {

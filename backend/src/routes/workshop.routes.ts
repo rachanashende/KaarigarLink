@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as c from '../controllers/workshop.controller';
+import * as invitations from '../controllers/invitation.controller';
 import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
@@ -18,6 +19,7 @@ import {
   updateWorkshopSchema,
   workshopIdParams,
 } from '../validators/workshop.validator';
+import { workshopInvitationsQuery } from '../validators/invitation.validator';
 
 const router = Router();
 const manage = authorize('WORKSHOP', 'ADMIN'); // ownership is checked in the service
@@ -26,7 +28,7 @@ router.use(authenticate);
 
 // Static paths must come before "/:id".
 router.get('/me', authorize('WORKSHOP'), c.getMyWorkshop);
-// GET /invitations is added in the matching module (M8).
+router.get('/invitations', authorize('WORKSHOP'), validate({ query: workshopInvitationsQuery }), invitations.listMyInvitations);
 
 router.get('/', validate({ query: listWorkshopsQuery }), c.listWorkshops);
 router.post('/', authorize('WORKSHOP'), validate({ body: createWorkshopSchema }), c.createWorkshop);

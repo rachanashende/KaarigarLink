@@ -126,7 +126,7 @@ A frontend workshop user gets their own workshop id from `GET /api/auth/me` → 
 | ✅ `POST /api/workshops/:id/capacity` | owner / ADMIN | Add window (`409` if it overlaps another window of the same unit) |
 | ✅ `PUT /api/workshops/:id/capacity/:capacityId` | owner / ADMIN | Update (e.g. `availableCapacity`) |
 | ✅ `DELETE /api/workshops/:id/capacity/:capacityId` | owner / ADMIN | Remove |
-| 🚧 `GET /api/workshops/invitations` | WORKSHOP | My job invitations (Day 3) |
+| ✅ `GET /api/workshops/invitations` | WORKSHOP | My job invitations (see Invitations) |
 
 **Workshop object** (`data.workshop`)
 ```json
@@ -193,6 +193,7 @@ All job endpoints require authentication.
 - Wrong role (e.g. a WORKSHOP calling `POST /api/jobs`) → `403`.
 - A job the caller may not see (another buyer's job, a workshop that wasn't invited, an inspector) → `404 "Job not found"`. It's the same response as for a job that doesn't exist, so private jobs aren't revealed.
 - Admins can view and list all jobs but cannot create or edit them.
+- An invited WORKSHOP can view the job via `GET /api/jobs/:id`, but **without `_count`**, so it can't learn how many other workshops were invited. Buyers and admins still receive `_count.invitations`.
 
 ### `POST /api/jobs`
 ```json
@@ -327,7 +328,8 @@ A buyer can never set `MATCHED`, `AWARDED`, `IN_PROGRESS` or `COMPLETED` (`400`)
 |---|---|---|
 | ✅ `GET /api/jobs/:id/matches` | owning BUYER / ADMIN | Evaluate every workshop for the job: ranked eligible ones plus excluded ones with reasons |
 
-**Read-only.** Matching is computed live on every call. It **creates no invitations** and **does not change the job** (status stays as it is). Inviting workshops is a separate buyer action (see Invitations below). Results are not stored, but they are deterministic: the same data gives the same ranking.
+**No invitations, no job changes.** Matching is computed live on every call. It **never creates invitations** and **never changes the job** (status and details stay as they are). Inviting workshops is a separate buyer action (see Invitations below). Results are not stored, but they are deterministic: the same data gives the same ranking.
+Its **only write is lazy expiry**: invitations of this job that are already expired (see Invitations → Expiry) are saved as `EXPIRED` before the `invitation` field is returned.
 
 **Access:** WORKSHOP / INSPECTOR → `403`. Another buyer's job or an unknown id → `404 "Job not found"`.
 **Job status:** only `OPEN` and `MATCHED` jobs can be matched. `DRAFT`, `CANCELLED`, `AWARDED`, `IN_PROGRESS` and `COMPLETED` → `409 "Matching is only available for OPEN or MATCHED jobs (this job is DRAFT)"`.
@@ -490,12 +492,136 @@ score = Σ effectiveWeight[f] × factorScore[f]      (rounded to 1 decimal, alwa
 
 **Data caveat:** `rating`, `ratingCount` and `totalCompletedJobs` are written by Member 2's rating and order modules. Until those exist, only seed data has non-zero values, so for newly registered workshops these two factors are the same for everyone.
 
-## Invitations (🚧 M8)
+## Invitations ✅
 
-Matching does not invite anyone. In M8 the buyer chooses eligible workshops from the match results and invites them through a separate endpoint, which stores the score snapshot in `JobInvitation` and moves the job to `MATCHED`.
+Matching never invites anyone. The buyer picks an **eligible** workshop from the match results and invites it, **one workshop per request**. Accepting or declining **only changes the invitation**: it creates no quote or order and does not change the job status (quotes and orders belong to Member 2's modules).
 
 | Method & path | Role | Purpose |
 |---|---|---|
-| 🚧 `POST /api/jobs/:id/invitations` | owning BUYER | Invite selected eligible workshops (contract to be agreed in M8) |
-| 🚧 `GET /api/workshops/invitations` | WORKSHOP | My job invitations |
-| 🚧 `POST /api/invitations/:id/respond` | invited WORKSHOP | `{ "response": "ACCEPTED" \| "DECLINED", "note"?: "..." }` |
+| ✅ `POST /api/jobs/:id/invitations` | owning BUYER | Invite one eligible workshop |
+| ✅ `GET /api/jobs/:id/invitations` | owning BUYER / ADMIN | A job's invitations, with the matching snapshot |
+| ✅ `GET /api/workshops/invitations` | WORKSHOP | Invitations received by my workshop |
+| ✅ `POST /api/invitations/:id/respond` | invited WORKSHOP | Accept or decline |
+
+**Status values and frontend labels.** The API always returns the enum value; frontends map it to their own labels:
+
+| API `status` | Buyer frontend | Workshop frontend | Meaning |
+|---|---|---|---|
+| `INVITED` | Pending | New | Waiting for the workshop |
+| `ACCEPTED` | Accepted | Accepted | Workshop wants to proceed (no quote/order is created) |
+| `DECLINED` | Declined | Rejected | Workshop said no |
+| `EXPIRED` | Expired | Expired | Response window passed, the job left `OPEN`/`MATCHED`, or the job was cancelled |
+
+### Expiry
+An **`INVITED`** invitation is `EXPIRED` when either of these is true:
+1. **Time:** now ≥ `expiresAt`, where `expiresAt = min(createdAt + 7 days, job deadline)` (returned on every invitation).
+2. **Job state:** the job is no longer `OPEN` or `MATCHED`, e.g. it was moved to `AWARDED`, `IN_PROGRESS` or `COMPLETED`. An outstanding invitation on such a job can't be answered.
+
+`expiresAt` reflects rule 1 only, so a status can become `EXPIRED` before `expiresAt` because of rule 2 or a cancellation.
+
+| Existing status | Time runs out | Job leaves `OPEN`/`MATCHED` (not cancelled) | Job cancelled |
+|---|---|---|---|
+| `INVITED` | → `EXPIRED` | → `EXPIRED` | → `EXPIRED` |
+| `ACCEPTED` | kept | **kept** (Member 2's order workflow may need it) | → `EXPIRED` (unchanged from jobs) |
+| `DECLINED` / `EXPIRED` | kept | kept | kept |
+
+- Expired invitations can't be answered and **are never returned as `INVITED`**.
+- **Lazy expiry:** expired invitations are saved as `EXPIRED` whenever invitations are listed, matches are viewed, an invite is attempted or a response is attempted. The same rule is applied when returning data, so every endpoint agrees even before the database row is updated. There is no background job.
+- **For Member 2:** after moving a job to another lifecycle state, call the exported helper `expireOverdueInvitations({ jobId }, now, tx)` from `backend/src/services/invitationExpiry.ts`, ideally in the same transaction, so outstanding `INVITED` invitations are saved as `EXPIRED` immediately. It only ever changes `INVITED` rows.
+
+### `POST /api/jobs/:id/invitations`
+Owning BUYER only. Body (any other field → `400`):
+```json
+{ "workshopId": "seed-ws-precision-works" }
+```
+The server **re-runs matching** at request time and only invites the workshop if it is eligible right now. `PENDING`, `REJECTED` and otherwise excluded workshops can never be invited. The score, rank, distance, breakdown and explanations at that moment are stored with the invitation. The **first** invitation moves the job `OPEN → MATCHED` and sets `matchedAt`, which locks the job details (see the job status rules). Later invitations leave it `MATCHED` and **don't modify the job**.
+
+**Concurrency safety**
+- **Workshop:** inside the transaction, only the target workshop's row is locked (`SELECT … FOR UPDATE`) and rechecked: it must still be `VERIFIED` and unchanged since matching evaluated it. Otherwise the invite gets `409 "Workshop was modified, please retry"`. A verification change made at the same moment waits for the invite to finish, and is then applied normally.
+- **Job, first invitation:** uses the job's strict "unchanged since read" check, because details can still change while the job is `OPEN`.
+- **Job, later invitations:** use a shared lock that only checks the job is still `MATCHED`. Invitations for different workshops can therefore run in parallel, and a cancellation that lands at the same moment either refuses the invite or expires it.
+
+`201` (new invitation):
+```json
+{ "success": true, "message": "Workshop invited",
+  "data": {
+    "created": true,
+    "jobStatus": "MATCHED",
+    "invitation": {
+      "id": "cm…", "jobId": "seed-job-alu-brackets", "workshopId": "seed-ws-precision-works",
+      "status": "INVITED", "matchScore": 90.8, "rank": 1, "distanceKm": 12.3,
+      "scoreBreakdown": { "ratingScore": 96, "capacityHeadroomScore": 100, "distanceScore": 97.5,
+                          "deadlineSlackScore": 52.8, "experienceScore": 94.4, "weights": { }, "effectiveWeights": { } },
+      "matchReasons": [ "Verified workshop", "Offers CNC_MACHINING", "…" ],
+      "responseNote": null, "respondedAt": null,
+      "createdAt": "2026-11-20T10:00:00.000Z", "expiresAt": "2026-11-27T10:00:00.000Z" } } }
+```
+
+**Inviting a workshop that already has an invitation for this job:**
+
+| Existing status | Result |
+|---|---|
+| `INVITED` / `ACCEPTED` | `200 "Workshop already invited"`, the existing invitation with `created: false`. Nothing changes |
+| `DECLINED` | `409 "This workshop declined the invitation; re-invitation is not allowed"` |
+| `EXPIRED` (including overdue) | `409 "The invitation to this workshop expired; re-invitation is not allowed"` |
+
+The database allows only one invitation per job and workshop, so two simultaneous invites still produce one row.
+
+| Error | When |
+|---|---|
+| `400` | missing or empty `workshopId`, unknown fields |
+| `401` / `403` | no token / not a BUYER |
+| `404 "Job not found"` | unknown job or another buyer's job |
+| `404 "Workshop not found"` | unknown workshop |
+| `409 "Invitations can only be sent for OPEN or MATCHED jobs (this job is DRAFT)"` | wrong job status |
+| `409 "Workshop is not eligible for this job"` | `errors` lists the matcher's reasons, e.g. `["Workshop is not yet verified (verification PENDING); only verified workshops are eligible"]` |
+| `409 "Workshop was modified, please retry"` | the target workshop changed (e.g. its verification) between matching and saving. Nothing is saved; retry |
+| `409 "Job was modified, please retry"` | first invitation: the job was edited, cancelled or invited in parallel. Later invitations: the job left `MATCHED` (e.g. was cancelled). Nothing is saved; retry |
+
+### `GET /api/jobs/:id/invitations`
+Owning BUYER or ADMIN (another buyer → `404`, WORKSHOP/INSPECTOR → `403`). Optional `?status=INVITED|ACCEPTED|DECLINED|EXPIRED`. Ordered by `rank`, then `createdAt`.
+```json
+{ "data": { "jobId": "…", "jobStatus": "MATCHED", "items": [
+  { "id": "…", "jobId": "…", "workshopId": "…", "status": "ACCEPTED", "matchScore": 90.8, "rank": 1,
+    "distanceKm": 12.3, "scoreBreakdown": { }, "matchReasons": [ ], "responseNote": "Can start Monday",
+    "respondedAt": "…", "createdAt": "…", "expiresAt": "…",
+    "workshop": { "id": "…", "businessName": "Precision Works", "city": "Pune", "verificationStatus": "VERIFIED" } } ] } }
+```
+
+### `GET /api/workshops/invitations`
+WORKSHOP only, and only invitations sent to the caller's own workshop. Query: `status`, `page` (1), `limit` (20, max 100). Newest first. **No `matchScore`, `rank`, `distanceKm`, `scoreBreakdown` or `matchReasons`**: workshops never see their own scores or how they compare with other workshops. The buyer is `{ id, name }` only, with no email.
+```json
+{ "data": {
+  "items": [ {
+    "id": "…", "jobId": "…", "workshopId": "…", "status": "INVITED",
+    "responseNote": null, "respondedAt": null, "createdAt": "…", "expiresAt": "…",
+    "job": { "id": "…", "title": "500 CNC-machined aluminium brackets", "description": "…",
+             "material": "aluminium", "manufacturingProcess": "CNC_MACHINING", "quantity": 500,
+             "quantityUnit": "UNITS", "deadline": "…", "address": "Hinjewadi Phase 1, Pune",
+             "technicalSpecifications": { "drawing": "BRK-101 rev C" }, "status": "MATCHED",
+             "requirements": [ { "requirementType": "MACHINE_TYPE", "requirementValue": "CNC_MILL", "isMandatory": true } ] },
+    "buyer": { "id": "…", "name": "Asha Rao" } } ],
+  "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 } } }
+```
+Mapping for the workshop frontend: `receivedAt` = `createdAt`, `deliveryAddress` = `job.address`, `machines` = `MACHINE_TYPE` requirement values, `buyer` = `buyer.name`. There is **no `price`**: the schema has no budget field, and prices come from quotes, which belong to Member 2.
+
+### `POST /api/invitations/:id/respond`
+WORKSHOP only, and only the invited workshop (anyone else → `404 "Invitation not found"`).
+```json
+{ "response": "ACCEPTED", "note": "Can start Monday" }
+```
+`response` must be `ACCEPTED` or `DECLINED`. `note` is optional, up to 500 characters, and trimmed. `200 "Invitation accepted"` / `"Invitation declined"` returns `{ invitation }` in the workshop shape, with `status`, `respondedAt` and `responseNote` set.
+
+| Error | When |
+|---|---|
+| `400` | invalid `response`, note too long, unknown fields |
+| `401` / `403` | no token / not a WORKSHOP |
+| `404 "Invitation not found"` | unknown id or another workshop's invitation |
+| `409 "Invitation has already been accepted"` / `"…declined"` | already answered; responses are final |
+| `409 "Invitation has expired"` | past `expiresAt` |
+| `409 "Invitation has expired: the job is no longer open (AWARDED)"` | the job is `CANCELLED`, `AWARDED`, `IN_PROGRESS`, `COMPLETED` (status shown in brackets) |
+| `409 "Invitation was modified, please retry"` | any other concurrent change |
+
+The status check and the write happen in **one conditional update**, so simultaneous accept and decline, or a response racing expiry or cancellation, can never both succeed.
+
+**Allowed status changes:** `INVITED → ACCEPTED | DECLINED` (by the workshop). `INVITED → EXPIRED` (time, job leaving `OPEN`/`MATCHED`, or cancellation). `ACCEPTED → EXPIRED` (job cancellation only). Nothing else; `DECLINED` and `EXPIRED` are final, and re-invitation is not allowed.
