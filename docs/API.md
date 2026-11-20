@@ -27,7 +27,7 @@ Status legend: ✅ live · 🚧 planned (contract fixed, implementation pending)
 | 401 | Missing, invalid or expired token; wrong credentials |
 | 403 | Authenticated but wrong role or not the owner |
 | 404 | Resource or route not found |
-| 409 | Duplicate (e.g. email already registered) |
+| 409 | Conflict: duplicate (e.g. email already registered), not allowed in the current status, or modified concurrently ("... was modified, please retry") |
 | 503 | Health check: database unreachable |
 
 IDs are strings (cuid). Dates are ISO 8601 strings. Coordinates are decimal degrees; `latitude` and `longitude` must be sent together.
@@ -148,6 +148,14 @@ A frontend workshop user gets their own workshop id from `GET /api/auth/me` → 
 ```
 Set `latitude` and `longitude` both to `null` to clear the location. Unknown fields → `400`.
 
+**Re-verification:** when the **owner** of a `VERIFIED` workshop changes `businessName`, `address`, `city`, the coordinates or `certifications`, `verificationStatus` goes back to `PENDING` for admin review. Description-only edits, re-sending unchanged values, and admin edits keep the current status. A `REJECTED` workshop stays `REJECTED` when the owner edits it.
+
+**Concurrent edits → `409`:** if the workshop changed between the server reading and writing it (e.g. an admin verified it while the owner was saving), nothing is saved and you get:
+```json
+{ "success": false, "message": "Workshop was modified, please retry" }
+```
+Frontend: re-fetch `GET /api/workshops/:id`, show the latest data, and let the user submit again.
+
 **POST /machines** → `201 { data: { machine } }`
 ```json
 { "machineName": "Haas VF-2", "machineType": "CNC_MILL", "quantity": 2,
@@ -169,14 +177,149 @@ Materials are stored lower-case and de-duplicated, and common aliases are unifie
 ```
 Meaning: *1000 units can be produced between these dates.* A date-only `endDate` includes that whole day. `endDate` must be on or after `startDate` and not in the past. On update, `availableCapacity: 0` means fully booked.
 
-## Jobs (🚧 Day 2)
+## Jobs ✅
+
+All job endpoints require authentication.
+
 | Method & path | Role | Purpose |
 |---|---|---|
-| `POST /api/jobs` | BUYER | Create job (with `requirements[]`) |
-| `GET /api/jobs` | BUYER (own) / ADMIN (all) | List jobs |
-| `GET /api/jobs/:id` | owner / ADMIN / invited WORKSHOP | Job details |
-| `PUT /api/jobs/:id` | owner | Update (only while DRAFT/OPEN) |
-| `DELETE /api/jobs/:id` | owner / ADMIN | Delete or cancel |
+| ✅ `POST /api/jobs` | BUYER | Create a job with its requirements |
+| ✅ `GET /api/jobs` | BUYER (own jobs only) / ADMIN (all) | List. Query: `status`, `page` (1), `limit` (20, max 100) |
+| ✅ `GET /api/jobs/:id` | owning BUYER / ADMIN / invited WORKSHOP | Job details |
+| ✅ `PUT /api/jobs/:id` | owning BUYER | Partial update and buyer status changes |
+| 🚧 `DELETE /api/jobs/:id` | n/a | Not implemented. Cancel with `PUT { "status": "CANCELLED" }` |
+
+**Access rules**
+- Wrong role (e.g. a WORKSHOP calling `POST /api/jobs`) → `403`.
+- A job the caller may not see (another buyer's job, a workshop that wasn't invited, an inspector) → `404 "Job not found"`. It's the same response as for a job that doesn't exist, so private jobs aren't revealed.
+- Admins can view and list all jobs but cannot create or edit them.
+
+### `POST /api/jobs`
+```json
+{
+  "title": "500 aluminium brackets",
+  "description": "Bracket per drawing BRK-101",
+  "material": "Aluminium",
+  "manufacturingProcess": "CNC_MACHINING",
+  "quantity": 500,
+  "quantityUnit": "UNITS",
+  "deadline": "2026-12-20",
+  "address": "Hinjewadi, Pune",
+  "latitude": 18.59,
+  "longitude": 73.74,
+  "technicalSpecifications": { "drawing": "BRK-101 rev C", "finish": "anodised" },
+  "status": "OPEN",
+  "requirements": [
+    { "requirementType": "MACHINE_TYPE", "requirementValue": "CNC_MILL" },
+    { "requirementType": "TOLERANCE_MM", "requirementValue": "0.05" },
+    { "requirementType": "PART_SIZE_MM", "requirementValue": 450 },
+    { "requirementType": "CERTIFICATION", "requirementValue": "ISO 9001", "isMandatory": false },
+    { "requirementType": "OTHER", "requirementValue": "Deburr all edges" }
+  ]
+}
+```
+
+| Field | Rules |
+|---|---|
+| `title` | required, 3–150 chars |
+| `description` | optional, max 5000 |
+| `material` | required, stored normalised (`Aluminum` → `aluminium`, same aliases as workshops) |
+| `manufacturingProcess` | required, ManufacturingProcess enum |
+| `quantity` | required, whole number, 1 – 10,000,000 (a JSON number, not a string) |
+| `quantityUnit` | `UNITS` (default) or `KG` |
+| `deadline` | required ISO date/datetime, **at least 24 h ahead** and **within 730 days**. A date-only value means the end of that day (UTC) |
+| `address`, `latitude`, `longitude` | optional. Latitude and longitude must be sent together. Used for distance in matching |
+| `technicalSpecifications` | optional free-form JSON object for people to read (not used for filtering) |
+| `status` | optional, `OPEN` (default) or `DRAFT` |
+| `requirements` | optional, max 20. See below |
+
+There is **no budget field** (the schema has none). Unknown fields such as `budget`, `buyerId`, `matchedAt` → `400`. The buyer is always the authenticated user.
+
+**Requirements.** The matching engine checks these, so values are validated per type:
+
+| `requirementType` | `requirementValue` | Stored as | Limit |
+|---|---|---|---|
+| `MACHINE_TYPE` | a MachineType (case-insensitive) | `"CNC_MILL"` | several allowed, no duplicates |
+| `TOLERANCE_MM` | positive number or numeric string (tightest tolerance needed) | `"0.05"` | one per job |
+| `PART_SIZE_MM` | positive number or numeric string (largest dimension) | `"450"` | one per job |
+| `CERTIFICATION` | certification code | `"ISO_9001"` | several allowed, no duplicates |
+| `OTHER` | free text 1–500 chars (informational, never filters) | as sent, trimmed | several allowed, no duplicates |
+
+`isMandatory` defaults to `true`. Mandatory requirements exclude workshops that don't meet them; optional ones only inform.
+
+`201`
+```json
+{ "success": true, "message": "Job created",
+  "data": { "job": {
+    "id": "cm...", "buyerId": "cm...", "title": "500 aluminium brackets", "description": "Bracket per drawing BRK-101",
+    "material": "aluminium", "manufacturingProcess": "CNC_MACHINING", "quantity": 500, "quantityUnit": "UNITS",
+    "deadline": "2026-12-20T23:59:59.999Z", "address": "Hinjewadi, Pune", "latitude": 18.59, "longitude": 73.74,
+    "technicalSpecifications": { "drawing": "BRK-101 rev C", "finish": "anodised" },
+    "status": "OPEN", "matchedAt": null, "createdAt": "...", "updatedAt": "...",
+    "buyer": { "id": "cm...", "name": "Asha Rao" },
+    "requirements": [
+      { "id": "cm...", "jobId": "cm...", "requirementType": "CERTIFICATION", "requirementValue": "ISO_9001", "isMandatory": false }
+    ],
+    "_count": { "invitations": 0 }
+  } } }
+```
+
+**Validation error** (`400`), one entry per bad field. Requirement errors name the index:
+```json
+{ "success": false, "message": "Validation failed", "errors": [
+  { "field": "quantity", "message": "quantity must be greater than 0" },
+  { "field": "deadline", "message": "deadline must be at least 24 hours in the future" },
+  { "field": "requirements.0.requirementValue", "message": "requirementValue must be one of: CNC_MILL, CNC_LATHE, ..." }
+] }
+```
+
+### `GET /api/jobs`
+`200 { data: { items: [Job], pagination: { page, limit, total, totalPages } } }`, newest first. Buyers get only their own jobs; admins get everyone's. Invalid `status` filter → `400`; WORKSHOP / INSPECTOR → `403`.
+
+### `GET /api/jobs/:id`
+`200 { data: { job } }` (same Job shape). `404` if the job doesn't exist or the caller may not see it.
+
+### `PUT /api/jobs/:id`
+Owning buyer only. Send any subset of the create fields. `description`, `address` and `technicalSpecifications` may be `null` to clear them, and `latitude`/`longitude` may both be `null`.
+```json
+{ "quantity": 750, "deadline": "2027-01-15",
+  "requirements": [ { "requirementType": "PART_SIZE_MM", "requirementValue": 300 } ] }
+```
+- `requirements`, when sent, **replaces the whole list** (`[]` clears it). When it's left out, requirements are unchanged. The job and its requirements are saved in one transaction, so an invalid requirement means nothing is saved.
+- `buyerId`, `matchedAt`, `id`, `createdAt` and other system fields → `400`.
+
+**Status rules.** These follow the existing lifecycle:
+
+| Current status | Buyer may edit details? | Buyer may set status to |
+|---|---|---|
+| `DRAFT` | yes | `OPEN`, `CANCELLED` |
+| `OPEN` | yes | `DRAFT`, `CANCELLED` |
+| `MATCHED` (set by matching) | no | `CANCELLED` |
+| `AWARDED`, `IN_PROGRESS`, `COMPLETED` (Member 2) | no | n/a |
+| `CANCELLED` | no | n/a |
+
+**Cancelling a job.** Send `PUT /api/jobs/:id` with `{ "status": "CANCELLED" }`. There is no DELETE.
+- Allowed from `DRAFT`, `OPEN` or `MATCHED`. Not allowed once `AWARDED` or later: that's order cancellation, which belongs to Member 2's module.
+- In the same transaction, every invitation for the job that is still `INVITED` or `ACCEPTED` becomes `EXPIRED`. `DECLINED` invitations are left as they are.
+- Cancelling is final: a `CANCELLED` job can't be reopened or edited (`409`). The job stays in the buyer's list with `status: "CANCELLED"`.
+- Sending a job's current status again (e.g. `CANCELLED` on a cancelled job) changes nothing and returns `200`.
+
+A buyer can never set `MATCHED`, `AWARDED`, `IN_PROGRESS` or `COMPLETED` (`400`). A disallowed transition or edit → `409`, e.g.:
+```json
+{ "success": false, "message": "Job details cannot be edited while status is MATCHED" }
+{ "success": false, "message": "Cannot change job status from CANCELLED to OPEN" }
+```
+
+**Concurrent edits → `409 "Job was modified, please retry"`.** This happens when the job changed between the server reading and writing it (for example, matching ran at the same moment). Nothing is saved, so re-fetch the job and resubmit.
+
+| Status | When |
+|---|---|
+| 200 / 201 | success |
+| 400 | validation failed, unknown/system field, malformed JSON |
+| 401 | no / invalid token |
+| 403 | wrong role |
+| 404 | job not found or not visible to you |
+| 409 | status rule violated, or concurrent modification |
 
 ## Matching & invitations (🚧 Day 3)
 | Method & path | Role | Purpose |

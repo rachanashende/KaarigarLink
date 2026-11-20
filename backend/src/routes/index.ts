@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
 import workshopRoutes from './workshop.routes';
+import jobRoutes from './job.routes';
 import { health } from '../controllers/health.controller';
 
 /**
@@ -12,5 +13,6 @@ const router = Router();
 router.get('/health', health);
 router.use('/auth', authRoutes);
 router.use('/workshops', workshopRoutes);
+router.use('/jobs', jobRoutes);
 
 export default router;
