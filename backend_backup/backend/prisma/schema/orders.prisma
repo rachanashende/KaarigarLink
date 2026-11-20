@@ -1,0 +1,24 @@
+// ============================================================================
+// ORDERS DOMAIN - owned by Member 2
+// Quotes, negotiation, orders, milestones, quality control, payments,
+// cancellations and ratings.
+//
+// Integration contract with core.prisma (Member 1):
+//   - Quote        -> invitationId (JobInvitation), jobId (Job), workshopId (Workshop)
+//                     Only workshops with an INVITED/ACCEPTED invitation may quote.
+//   - Order        -> jobId @unique (one order per job), buyerId (User), workshopId (Workshop)
+//                     Creating an order sets Job.status = AWARDED.
+//   - Milestone    -> orderId
+//   - Inspection   -> orderId, inspectorId (User with role INSPECTOR)
+//   - Payment      -> orderId (simulated)
+//   - Rating       -> orderId @unique, workshopId, buyerId
+//                     After insert, update Workshop.rating (running average),
+//                     Workshop.ratingCount and Workshop.totalCompletedJobs.
+//
+// Prisma requires both sides of a relation: when you add a model that points
+// at a core model, also add the back-relation field in core.prisma (marked
+// with "Member 2: add back-relations here").
+//
+// Migrations: pull latest `backend` branch BEFORE running `npm run db:migrate`
+// so migration folders stay linear.
+// ============================================================================
