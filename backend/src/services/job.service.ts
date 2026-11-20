@@ -122,8 +122,10 @@ export async function updateJob(user: AuthUser, id: string, input: UpdateJobInpu
           technicalSpecifications: (technicalSpecifications ?? undefined) as Prisma.InputJsonValue | undefined,
         }),
         ...(statusChanges && { status }),
-        // Explicit so requirement-only edits still advance the version.
-        updatedAt: new Date(),
+        // Explicit so requirement-only edits still advance the version. Always strictly
+        // later than the version we read: the DB engine's clock (create) and Node's clock
+        // (here) can differ by a few ms, and an equal value would weaken the 409 check.
+        updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)),
       },
     });
     if (count === 0) throw ApiError.conflict('Job was modified, please retry');
