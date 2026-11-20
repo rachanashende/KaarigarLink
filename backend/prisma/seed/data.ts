@@ -7,7 +7,8 @@
  *
  * Each job carries `expected` matching outcomes (not stored in the DB). They are
  * the contract the matching engine (M7) is tested against, assuming these rules:
- *   - workshop not REJECTED (PENDING is allowed)
+ *   - workshop VERIFIED (PENDING and REJECTED are excluded)
+ *   - missing coordinates never exclude (distance is then omitted from the score)
  *   - capability for the job's process, with the job's material
  *   - an OPERATIONAL machine of a type suitable for the process
  *   - mandatory requirements met (machine type, tolerance, part size, certification)
@@ -444,7 +445,7 @@ export const JOBS: SeedJob[] = [
       eligible: ['seed-ws-precision-works', 'seed-ws-talegaon-tooling', 'seed-ws-mumbai-metalcraft'],
       excluded: {
         'seed-ws-chakan-cnc': 'certification: lacks ISO_9001',
-        'seed-ws-nashik-small-batch': 'capacity: about 295 units free before the deadline, needs 500',
+        'seed-ws-nashik-small-batch': 'capacity: about 295 units free before the deadline, needs 500 (also unverified)',
         'seed-ws-hadapsar-fabricators': 'verification: REJECTED',
         'seed-ws-kothrud-precision': 'machine: no OPERATIONAL CNC machine (maintenance/offline)',
         'seed-ws-delhi-precision': 'capacity: only window starts day 50, after the deadline',
@@ -673,15 +674,15 @@ export const JOBS: SeedJob[] = [
     status: 'OPEN',
     requirements: [],
     expected: {
-      scenario: 'Unverified (PENDING) workshop is eligible and nearest; many eligible shops for ranking',
+      scenario: 'Nearest workshop is unverified (PENDING) and excluded; four verified shops ranked',
       eligible: [
-        'seed-ws-nashik-small-batch',
         'seed-ws-precision-works',
         'seed-ws-chakan-cnc',
         'seed-ws-mumbai-metalcraft',
         'seed-ws-talegaon-tooling',
       ],
       excluded: {
+        'seed-ws-nashik-small-batch': 'verification: PENDING - meets every other requirement but is not verified',
         'seed-ws-hadapsar-fabricators': 'verification: REJECTED',
         'seed-ws-kothrud-precision': 'machine: no OPERATIONAL CNC machine',
         'seed-ws-delhi-precision': 'capacity: window starts after the deadline',

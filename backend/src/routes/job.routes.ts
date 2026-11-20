@@ -4,6 +4,8 @@ import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
 import { createJobSchema, jobIdParams, listJobsQuery, updateJobSchema } from '../validators/job.validator';
+import * as matching from '../controllers/matching.controller';
+import { matchesQuery } from '../validators/matching.validator';
 
 const router = Router();
 
@@ -15,6 +17,7 @@ router.get('/', authorize('BUYER', 'ADMIN'), validate({ query: listJobsQuery }),
 router.get('/:id', validate({ params: jobIdParams }), c.getJob);
 router.put('/:id', authorize('BUYER'), validate({ params: jobIdParams, body: updateJobSchema }), c.updateJob);
 
-// Matching routes (POST /:jobId/match, GET /:jobId/matches) are added in M8.
+// Matching (M7): read-only, computes ranked matches; creates no invitations.
+router.get('/:id/matches', authorize('BUYER', 'ADMIN'), validate({ params: jobIdParams, query: matchesQuery }), matching.getJobMatches);
 
 export default router;

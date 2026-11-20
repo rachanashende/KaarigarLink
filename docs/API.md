@@ -294,7 +294,7 @@ Owning buyer only. Send any subset of the create fields. `description`, `address
 |---|---|---|
 | `DRAFT` | yes | `OPEN`, `CANCELLED` |
 | `OPEN` | yes | `DRAFT`, `CANCELLED` |
-| `MATCHED` (set by matching) | no | `CANCELLED` |
+| `MATCHED` (set when the buyer sends invitations, M8; viewing matches does not set it) | no | `CANCELLED` |
 | `AWARDED`, `IN_PROGRESS`, `COMPLETED` (Member 2) | no | n/a |
 | `CANCELLED` | no | n/a |
 
@@ -310,7 +310,7 @@ A buyer can never set `MATCHED`, `AWARDED`, `IN_PROGRESS` or `COMPLETED` (`400`)
 { "success": false, "message": "Cannot change job status from CANCELLED to OPEN" }
 ```
 
-**Concurrent edits → `409 "Job was modified, please retry"`.** This happens when the job changed between the server reading and writing it (for example, matching ran at the same moment). Nothing is saved, so re-fetch the job and resubmit.
+**Concurrent edits → `409 "Job was modified, please retry"`.** This happens when the job changed between the server reading and writing it (for example, an invitation was sent at the same moment). Nothing is saved, so re-fetch the job and resubmit.
 
 | Status | When |
 |---|---|
@@ -321,9 +321,181 @@ A buyer can never set `MATCHED`, `AWARDED`, `IN_PROGRESS` or `COMPLETED` (`400`)
 | 404 | job not found or not visible to you |
 | 409 | status rule violated, or concurrent modification |
 
-## Matching & invitations (🚧 Day 3)
+## Matching ✅
+
 | Method & path | Role | Purpose |
 |---|---|---|
-| `POST /api/jobs/:jobId/match` | owner BUYER / ADMIN | Run matching, create invitations |
-| `GET /api/jobs/:jobId/matches` | owner BUYER / ADMIN | Ranked matches with score breakdown |
-| `POST /api/invitations/:id/respond` | invited WORKSHOP | `{ "response": "ACCEPTED" \| "DECLINED", "note"?: "..." }` |
+| ✅ `GET /api/jobs/:id/matches` | owning BUYER / ADMIN | Evaluate every workshop for the job: ranked eligible ones plus excluded ones with reasons |
+
+**Read-only.** Matching is computed live on every call. It **creates no invitations** and **does not change the job** (status stays as it is). Inviting workshops is a separate buyer action (see Invitations below). Results are not stored, but they are deterministic: the same data gives the same ranking.
+
+**Access:** WORKSHOP / INSPECTOR → `403`. Another buyer's job or an unknown id → `404 "Job not found"`.
+**Job status:** only `OPEN` and `MATCHED` jobs can be matched. `DRAFT`, `CANCELLED`, `AWARDED`, `IN_PROGRESS` and `COMPLETED` → `409 "Matching is only available for OPEN or MATCHED jobs (this job is DRAFT)"`.
+
+**Query (optional)**
+| Param | Rules |
+|---|---|
+| `maxDistanceKm` | number > 0, ≤ 20000. Hard limit: farther workshops become excluded with a reason. Workshops with **no location are never excluded** by it; they get an explanation instead. Requires the job to have a location (otherwise `400`). Omit it to rank by distance without excluding anyone. |
+
+Any other query parameter → `400`.
+
+**Response** `200`, `message` is `"Matching completed"` or `"Matching completed: no eligible workshops"`
+```json
+{
+  "success": true,
+  "message": "Matching completed",
+  "data": {
+    "jobId": "seed-job-alu-brackets",
+    "jobStatus": "OPEN",
+    "evaluatedAt": "2026-11-20T09:30:00.000Z",
+    "totalWorkshops": 12,
+    "eligibleCount": 3,
+    "excludedCount": 9,
+    "scoring": { "weights": { "rating": 0.35, "capacityHeadroom": 0.25, "distance": 0.2, "deadlineSlack": 0.15, "experience": 0.05 },
+                 "distanceZeroScoreKm": 500, "maxDistanceKm": null },
+    "results": [
+      {
+        "jobId": "seed-job-alu-brackets",
+        "workshopId": "seed-ws-precision-works",
+        "businessName": "Precision Works",
+        "city": "Pune",
+        "verificationStatus": "VERIFIED",
+        "rating": 4.8,
+        "ratingCount": 25,
+        "totalCompletedJobs": 40,
+        "distanceKm": 12.3,
+        "score": 90.8,
+        "rank": 1,
+        "scoreBreakdown": {
+          "ratingScore": 96, "capacityHeadroomScore": 100, "distanceScore": 97.5,
+          "deadlineSlackScore": 52.8, "experienceScore": 94.4,
+          "weights": { "rating": 0.35, "capacityHeadroom": 0.25, "distance": 0.2, "deadlineSlack": 0.15, "experience": 0.05 },
+          "effectiveWeights": { "rating": 0.35, "capacityHeadroom": 0.25, "distance": 0.2, "deadlineSlack": 0.15, "experience": 0.05 }
+        },
+        "availableCapacity": 1336,
+        "estimatedCompletion": "2026-12-04T05:11:00.000Z",
+        "explanations": [
+          "Verified workshop", "Offers CNC_MACHINING", "Supports aluminium for CNC_MACHINING",
+          "5 operational machines for CNC_MACHINING (CNC_MILL, CNC_LATHE)",
+          "Has 3 operational CNC_MILL machines (required CNC_MILL)",
+          "Achieves ±0.01 mm tolerance (required ±0.05 mm)", "Holds ISO_9001 certification",
+          "About 1,336 UNITS free before the deadline (needs 500 UNITS)",
+          "Estimated completion 2026-12-04 incl. 3-day lead time, 16.2 days before the 2026-12-20 deadline",
+          "12.3 km from the job location", "Rated 4.8/5 from 25 reviews", "40 completed jobs on the platform"
+        ],
+        "eligibility": { "eligible": true, "reasons": [] },
+        "invitation": null
+      },
+      {
+        "jobId": "seed-job-alu-brackets",
+        "workshopId": "seed-ws-nashik-small-batch",
+        "businessName": "Nashik Small Batch",
+        "city": "Nashik",
+        "verificationStatus": "PENDING",
+        "rating": 0,
+        "ratingCount": 0,
+        "totalCompletedJobs": 0,
+        "distanceKm": 156.5,
+        "score": null,
+        "rank": null,
+        "scoreBreakdown": null,
+        "availableCapacity": 297,
+        "estimatedCompletion": null,
+        "explanations": [ "Offers CNC_MACHINING", "Supports aluminium for CNC_MACHINING", "..." ],
+        "eligibility": { "eligible": false,
+          "reasons": [ "Workshop is not yet verified (verification PENDING); only verified workshops are eligible",
+                       "Insufficient capacity: about 297 UNITS free before the deadline, job needs 500 UNITS" ] },
+        "invitation": null
+      }
+    ]
+  }
+}
+```
+
+**Result fields** (one entry per workshop on the platform)
+| Field | Meaning |
+|---|---|
+| `jobId`, `workshopId`, `score`, `explanations`, `eligibility` | The fields the buyer frontend expects |
+| `verificationStatus` | The workshop's **real** status. Only `VERIFIED` workshops are eligible; `PENDING` and `REJECTED` ones appear as excluded, with the reason |
+| `score` | 0–100 for eligible workshops; **`null` for excluded ones** (they are never scored) |
+| `rank` | 1-based position among eligible workshops; `null` when excluded |
+| `scoreBreakdown` | The five factor scores (`ratingScore`, `capacityHeadroomScore`, `distanceScore`, `deadlineSlackScore`, `experienceScore`), the configured `weights` and the `effectiveWeights` actually applied; `null` when excluded. `distanceScore` is `null` when the distance is unknown |
+| `rating`, `ratingCount`, `totalCompletedJobs` | Inputs to the rating and experience factors (maintained by Member 2's rating/order modules) |
+| `distanceKm` | Straight-line km, or `null` if the job or the workshop has no location (this never excludes a workshop) |
+| `availableCapacity` | Units the workshop can produce between now and the deadline |
+| `estimatedCompletion` | When production plus lead time would finish; `null` if capacity is insufficient |
+| `explanations` | What the workshop satisfies (present for excluded workshops too) |
+| `eligibility.reasons` | Why it is excluded (every failed rule, not just the first); `[]` when eligible |
+| `invitation` | `{ id, status }` if this workshop was already invited to the job, else `null`. Status is `INVITED`, `ACCEPTED`, `DECLINED` or `EXPIRED` (frontends map these to their own labels) |
+
+**Order:** eligible workshops by `rank` (highest score first), then excluded workshops alphabetically by name.
+
+### Eligibility rules (all mandatory, checked before any scoring)
+1. **Verification:** only `VERIFIED` workshops are eligible. `PENDING` (not yet verified) and `REJECTED` → excluded.
+2. **Capability:** has a capability for the job's `manufacturingProcess`.
+3. **Material:** that capability supports the job's material (normalised, e.g. `aluminum` = `aluminium`).
+4. **Machine:** at least one `OPERATIONAL` machine suited to the process:
+
+   | Process | Machine types |
+   |---|---|
+   | CNC_MACHINING | CNC_MILL, CNC_LATHE |
+   | LATHE_TURNING | CNC_LATHE, MANUAL_LATHE |
+   | SHEET_METAL_FABRICATION | PRESS_BRAKE, PUNCH_PRESS, LASER_CUTTER |
+   | LASER_CUTTING | LASER_CUTTER |
+   | WELDING | WELDING_STATION |
+   | INJECTION_MOLDING | INJECTION_MOLDER |
+   | CASTING | CASTING_FURNACE |
+   | FORGING | FORGING_HAMMER |
+   | THREE_D_PRINTING | THREE_D_PRINTER |
+   | POWDER_COATING | POWDER_COATING_BOOTH |
+5. **Mandatory job requirements:**
+   - `MACHINE_TYPE`: an operational machine of that type.
+   - `TOLERANCE_MM`: capability `minToleranceMm` ≤ the value. If the capability doesn't specify it, the workshop is excluded.
+   - `PART_SIZE_MM`: capability `maxPartSizeMm` ≥ the value. Missing → excluded.
+   - `CERTIFICATION`: listed in the workshop's certifications.
+   - `OTHER` never filters. Optional (`isMandatory: false`) requirements never exclude; they only add an explanation.
+6. **Capacity:** capacity windows in the job's `quantityUnit` that overlap *now → deadline* are counted in proportion to the overlap (capacity is assumed spread evenly across each window). The total must be ≥ `quantity`.
+7. **Deadline:** production at that rate from now, plus the capability's `leadTimeDays`, must finish on or before the deadline.
+8. **Distance** (only when `maxDistanceKm` is given): a workshop farther than the limit is excluded.
+
+**Missing coordinates never exclude a workshop.** If the job or the workshop has no (valid) location, the distance is unknown and is simply left out of the score (see below).
+
+### Scoring (eligible workshops only)
+
+Technical fit (rules 2–7) and verification (rule 1) are **eligibility filters, not ranking factors**. Verification earns no points: every eligible workshop is `VERIFIED`, so it would add the same amount to everyone.
+
+Five factors, each normalised to **0–100**:
+
+| Factor | Weight | Formula | Source fields |
+|---|---|---|---|
+| **Rating** | 35% | `rating / 5 × 100`. **No ratings yet** (`ratingCount = 0`) → neutral **60** (= 3/5), so new workshops aren't buried | `Workshop.rating`, `ratingCount` |
+| **Capacity headroom** | 25% | `min(100, (available − quantity) / quantity × 100)`. Exactly enough → **0**, 1.5× → 50, **2× or more → 100** | capacity windows (pro-rated *now → deadline*), `Job.quantity` |
+| **Distance** | 20% | `max(0, 100 × (1 − km / 500))`. 0 km → 100, ≥ 500 km → 0. **Unknown → omitted** (see below) | job and workshop coordinates (Haversine) |
+| **Deadline slack** | 15% | `(deadline − estimatedCompletion) / (deadline − now) × 100`. Finishing exactly on the deadline → **0**; the more of the remaining time is left over, the higher | `estimatedCompletion` = production at the capacity rate + `Capability.leadTimeDays` |
+| **Experience** | 5% | `min(100, ln(1 + jobs) / ln(1 + 50) × 100)`, a log scale with diminishing returns: 0 jobs → 0, 5 → 46, 10 → 61, **50+ → 100** | `Workshop.totalCompletedJobs` |
+
+```
+score = Σ effectiveWeight[f] × factorScore[f]      (rounded to 1 decimal, always 0–100)
+```
+
+**Missing values**
+- **Distance unknown** (job or workshop has no valid coordinates): the distance factor is **omitted** and the other weights are re-normalised to 100%, i.e. each is divided by 0.8: rating 43.75%, headroom 31.25%, slack 18.75%, experience 6.25%. The workshop is **never excluded** for this. `scoreBreakdown.distanceScore` is `null` and `effectiveWeights.distance` is `0`.
+- **No ratings yet:** neutral rating score 60 (not omitted).
+- **Zero completed jobs:** a real value, so the experience score is 0.
+- Capacity headroom and deadline slack always exist for eligible workshops (eligibility needs enough capacity and a completion date before the deadline).
+
+**Worked example** (seed job `alu-brackets`, Precision Works): `0.35×96 + 0.25×100 + 0.20×97.5 + 0.15×52.8 + 0.05×94.4 = 90.8`.
+
+**Tie-breaks** (always deterministic, independent of input order and server locale): higher `score`, then shorter `distanceKm` (unknown last), higher `rating`, more `ratingCount`, `businessName` (plain character order), then `workshopId`.
+
+**Data caveat:** `rating`, `ratingCount` and `totalCompletedJobs` are written by Member 2's rating and order modules. Until those exist, only seed data has non-zero values, so for newly registered workshops these two factors are the same for everyone.
+
+## Invitations (🚧 M8)
+
+Matching does not invite anyone. In M8 the buyer chooses eligible workshops from the match results and invites them through a separate endpoint, which stores the score snapshot in `JobInvitation` and moves the job to `MATCHED`.
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| 🚧 `POST /api/jobs/:id/invitations` | owning BUYER | Invite selected eligible workshops (contract to be agreed in M8) |
+| 🚧 `GET /api/workshops/invitations` | WORKSHOP | My job invitations |
+| 🚧 `POST /api/invitations/:id/respond` | invited WORKSHOP | `{ "response": "ACCEPTED" \| "DECLINED", "note"?: "..." }` |

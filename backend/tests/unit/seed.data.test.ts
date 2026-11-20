@@ -111,9 +111,11 @@ describe('seed dataset integrity', () => {
     for (const kind of ['certification', 'capacity', 'verification', 'machine', 'capability', 'deadline', 'material']) {
       expect(reasons, kind).toContain(kind);
     }
-    // An unverified (PENDING) workshop that is expected to be eligible.
+    // Only VERIFIED workshops may be expected eligible; a PENDING one is expected excluded somewhere.
+    const statusById = new Map(WORKSHOPS.map((w) => [w.id, w.verificationStatus]));
+    expect(JOBS.every((j) => j.expected.eligible.every((id) => statusById.get(id) === 'VERIFIED'))).toBe(true);
     const pendingIds = WORKSHOPS.filter((w) => w.verificationStatus === 'PENDING').map((w) => w.id);
-    expect(JOBS.some((j) => j.expected.eligible.some((id) => pendingIds.includes(id)))).toBe(true);
+    expect(JOBS.some((j) => pendingIds.some((id) => /PENDING/.test(j.expected.excluded[id] ?? '')))).toBe(true);
   });
 });
 
