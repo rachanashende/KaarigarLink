@@ -1,3 +1,5 @@
+import { DesignSystemPreview } from './DesignSystemPreview';
+import { EditorialHeading } from '@/components/design-system';
 import { Factory } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -9,7 +11,7 @@ export function FoundationPage() {
         <header className="flex items-center gap-3 border-b pb-6 font-semibold"><Factory aria-hidden="true" className="text-primary" />KaarigarLink</header>
         <main id="main" tabIndex={-1} className="py-12 sm:py-20">
           <p className="mb-4 text-sm font-semibold text-primary">Phase 0 · Frontend foundation</p>
-          <h1 className="max-w-2xl text-3xl leading-tight font-semibold tracking-tight sm:text-5xl">A shared foundation for manufacturing job-work.</h1>
+          <EditorialHeading>A shared foundation for <em>manufacturing job-work.</em></EditorialHeading>
           <p className="mt-6 max-w-2xl leading-relaxed text-muted-foreground">Design tokens, TypeScript contracts and mock services are ready for phased development. Buyer, inspector and admin screens will follow after review.</p>
           <section aria-labelledby="handoff" className="mt-10 rounded-lg border bg-card p-6 sm:p-8">
             <h2 id="handoff" className="text-xl font-semibold">Workshop frontend reserved</h2>
@@ -22,6 +24,7 @@ export function FoundationPage() {
               <li>Strict React + TypeScript tooling</li><li>Industrial palette and accessible defaults</li><li>Provisional shared data contracts</li><li>In-memory mock service architecture</li>
             </ul>
           </section>
+          <DesignSystemPreview />
         </main>
         <a href="/" className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4">Return to workspace</a>
         <footer className="border-t pt-6 text-sm text-muted-foreground">Development preview · No live transactions</footer>

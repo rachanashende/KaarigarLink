@@ -53,3 +53,9 @@ Workshop routes now show owner-scoped canonical dashboard metrics, invitations/j
 Owned invitation accept/decline and quotation submit/edit/withdraw are now confirmed, validated local mock commands over the existing shared store. Buyer comparison and Admin oversight see the same Quote records. The preceding Phase 8B.1/8B.2 sections describe historical states; the workshop placeholder statement no longer applies on this integration branch.
 
 Buyer award, order creation, production/rework/QC submission, workshop payment/closure, profile/settings/onboarding writes remain disabled pending compatible contracts. No backend endpoint, standalone provider, dependency or shared entity change was introduced. See the [command compatibility matrix](docs/phase-8b3-contract-matrix.md) and [verification report](docs/phase-8b3-verification.md) for exact scope, tests and limits.
+
+## Phase 9A shared visual system
+
+The dedicated design/phase-9a-ampliflow branch introduces verified Ampliflow-inspired typography/color and shared shell/component styling, preserving all four-role workflows. Exact source values, app adaptations, fonts/licenses and motion rules are documented in [the Phase 9A specification](docs/phase-9a-design-specification.md). The existing /foundation route includes an isolated component specimen section; it performs no business mutation.
+
+See [Phase 9A verification](docs/phase-9a-verification.md) for actual checks, visual evidence and limits. No backend/domain/service change, new npm dependency or activation of blocked commands is part of this phase. Detailed marketplace browsing and individual business-page redesigns remain for later phases.

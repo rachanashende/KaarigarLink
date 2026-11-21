@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 type ControlProps = { id: string; 'aria-invalid': boolean; 'aria-describedby': string | undefined };
-export const controlClass = 'min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm disabled:opacity-60';
+export const controlClass = 'kl-control min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm disabled:opacity-60';
 export function FormField({ id, label, error, hint, optional = false, children }: {
   id: string; label: string; error?: string | undefined; hint?: string; optional?: boolean; children: (props: ControlProps) => ReactNode;
 }) {
