@@ -1,24 +1,159 @@
-// ============================================================================
-// ORDERS DOMAIN - owned by Member 2
-// Quotes, negotiation, orders, milestones, quality control, payments,
-// cancellations and ratings.
-//
-// Integration contract with core.prisma (Member 1):
-//   - Quote        -> invitationId (JobInvitation), jobId (Job), workshopId (Workshop)
-//                     Only workshops with an INVITED/ACCEPTED invitation may quote.
-//   - Order        -> jobId @unique (one order per job), buyerId (User), workshopId (Workshop)
-//                     Creating an order sets Job.status = AWARDED.
-//   - Milestone    -> orderId
-//   - Inspection   -> orderId, inspectorId (User with role INSPECTOR)
-//   - Payment      -> orderId (simulated)
-//   - Rating       -> orderId @unique, workshopId, buyerId
-//                     After insert, update Workshop.rating (running average),
-//                     Workshop.ratingCount and Workshop.totalCompletedJobs.
-//
-// Prisma requires both sides of a relation: when you add a model that points
-// at a core model, also add the back-relation field in core.prisma (marked
-// with "Member 2: add back-relations here").
-//
-// Migrations: pull latest `backend` branch BEFORE running `npm run db:migrate`
-// so migration folders stay linear.
-// ============================================================================
+
+enum QuoteStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum OrderStatus {
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+  REWORK_REQUIRED
+}
+
+enum InspectionStatus {
+  PASSED
+  FAILED
+  REWORK_REQUIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Quote {
+  id            String      @id @default(cuid())
+  invitationId  String      @unique
+  jobId         String
+  workshopId    String
+  totalPrice    Decimal     @db.Decimal(12, 2)
+  currency      String      @default("INR")
+  estimatedDays Int
+  notes         String?     @db.Text
+  validUntil    DateTime?
+  status        QuoteStatus @default(SUBMITTED)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  invitation JobInvitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  job        Job           @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  workshop   Workshop      @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  order      Order?
+
+  @@index([jobId, status])
+  @@index([workshopId])
+}
+
+model Order {
+  id                    String      @id @default(cuid())
+  jobId                 String      @unique
+  quoteId               String      @unique
+  buyerId               String
+  workshopId            String
+  agreedPrice           Decimal     @db.Decimal(12, 2)
+  currency              String      @default("INR")
+  status                OrderStatus @default(CONFIRMED)
+  expectedCompletionDate DateTime?
+  actualCompletionDate  DateTime?
+  cancellationReason    String?     @db.Text
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  job        Job         @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  quote      Quote       @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  buyer      User        @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Restrict)
+  workshop   Workshop    @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  milestones Milestone[]
+  inspections Inspection[]
+  payments   Payment[]
+  rating     Rating?
+
+  @@index([buyerId])
+  @@index([workshopId])
+  @@index([status])
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  orderId     String
+  title       String
+  description String?         @db.Text
+  sequence    Int
+  status      MilestoneStatus @default(PENDING)
+  dueDate     DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  notes       String?         @db.Text
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, sequence])
+  @@index([orderId, status])
+}
+
+model Inspection {
+  id          String           @id @default(cuid())
+  orderId     String
+  inspectorId String
+  status      InspectionStatus
+  findings    String?          @db.Text
+  inspectedAt DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inspector User  @relation(fields: [inspectorId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([inspectorId])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("INR")
+  status        PaymentStatus @default(PENDING)
+  transactionRef String?      @unique
+  description   String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, status])
+}
+
+model Rating {
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  workshopId String
+  buyerId    String
+  score      Int
+  review     String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Restrict)
+  buyer    User     @relation("BuyerRatings", fields: [buyerId], references: [id], onDelete: Restrict)
+
+  @@index([workshopId])
+  @@index([buyerId])
+}
