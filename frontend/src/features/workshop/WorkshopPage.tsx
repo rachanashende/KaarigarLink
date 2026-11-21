@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router';
 import { workshopNavigation, type WorkshopSection } from '@/app/roles';
-import { PageHeader } from '@/components/PageHeader';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ErrorState, LoadingState } from '@/components/feedback';
 import { useServices } from '@/app/services';
 import { useWorkshopWorkspace } from './queries';
@@ -16,7 +16,7 @@ const sections: Record<WorkshopSection, { title: string; description: string; ac
   },
   invitations: {
     title: 'Invitations',
-    description: 'Read invitations and quotations addressed to your canonical workshop. Invitation responses and quotation changes are local mock simulations only; order creation still requires buyer award.',
+    description: 'Read invitations and quotations addressed to your workshop. Invitation responses and quotation changes are local mock simulations only; order creation still requires buyer award.',
     actions: [],
   },
   orders: {
@@ -26,7 +26,7 @@ const sections: Record<WorkshopSection, { title: string; description: string; ac
   },
   profile: {
     title: 'Workshop profile',
-    description: 'Read your linked workshop profile, machinery and published capacity. Profile editing remains disabled.',
+    description: 'Review your workshop profile, machinery and published capacity. Profile editing remains disabled.',
     actions: ['Edit profile'],
   },
   settings: {
@@ -48,19 +48,21 @@ export function WorkshopPage({ section = 'dashboard' }: { section?: WorkshopSect
   const services = useServices();
   const page = sections[section];
   const detail = Boolean(invitationId || orderId);
-  return <div className="space-y-6" data-workshop-workspace>
-    <PageHeader title={detail ? (section === 'invitations' ? 'Invitation details' : 'Order details') : page.title} description={page.description} />
-    <section aria-label="Workshop integration status" className="rounded-lg border bg-card p-5 sm:p-6">
+  const availability = <section aria-label="Workshop integration status" className="role-boundary">
       <h2 className="font-semibold">Workshop workflow availability</h2>
-      <p id="workshop-disabled-reason" className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Invitation responses and supported quotation changes are local mock simulations. Production, QC, payment and account writes remain unavailable pending compatible contracts. No standalone workshop demo store is used.</p>
-      <p className="mt-3 text-sm text-muted-foreground">Signed in as {user?.name} through your shared KaarigarLink session.</p>
+      <p id="workshop-disabled-reason" className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Invitation responses and quotation changes are local demo simulations. Production updates, QC decisions, payments and account editing are unavailable here. Accepting an invitation never awards a job or creates an order.</p>
+      <p className="mt-3 text-sm text-muted-foreground">Signed in as {user?.name}.</p>
       {page.actions.length > 0 && <fieldset disabled aria-describedby="workshop-disabled-reason" className="mt-5">
         <legend className="mb-3 text-sm font-medium">Unavailable actions</legend>
         <div className="flex flex-wrap gap-3">{page.actions.map(action => <Button key={action} disabled variant="outline">{action}</Button>)}</div>
       </fieldset>}
-    </section>
+    </section>;
+  return <div className="space-y-6" data-workshop-workspace>
+    <WorkspaceHeader label="Workshop / Manufacturing operations" title={detail ? (section === 'invitations' ? 'Invitation details' : 'Order details') : page.title} description={page.description} />
+    {section !== 'dashboard' && availability}
     {services.demo?.warning && <p role="alert" className="rounded-lg border border-destructive/30 bg-card p-5 text-sm">{services.demo.warning} Use the shared demo reset on the Buyer, Inspector or Admin workspace; it restores the same data for all roles.</p>}
     {workspace.isPending ? <LoadingState label="Loading shared workshop records..." /> : workspace.isError ? <ErrorState message={workspace.error.message} onRetry={() => { void workspace.refetch(); }} /> : workspace.data && <WorkshopRecords key={[user?.id, section, invitationId, orderId].join('/')} data={workspace.data} section={section} {...(invitationId === undefined ? {} : { invitationId })} {...(orderId === undefined ? {} : { orderId })} />}
+    {section === 'dashboard' && availability}
     <nav aria-label="Workshop pages" className="flex flex-wrap gap-3">
       {section !== 'dashboard' && <Button asChild variant="outline"><Link to="/workshop/dashboard">Workshop overview</Link></Button>}
       {workshopNavigation.filter(item => item.section !== section).map(item => <Button key={item.path} asChild variant="outline"><Link to={item.path}>{item.label}</Link></Button>)}

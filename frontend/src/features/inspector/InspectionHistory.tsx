@@ -4,8 +4,9 @@ import { dateLabel } from './model';
 
 export function InspectionHistory({ inspection, inspectorName }: { inspection: Inspection; inspectorName: string }) {
   const history = [...(inspection.history ?? [])].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-  return <section aria-labelledby="decision-history" className="rounded-lg border bg-card p-5 sm:p-6">
-    <h2 id="decision-history" className="text-lg font-semibold">Previous QC decisions & rework history</h2>
+  return <section aria-labelledby="decision-history" className="role-history rounded-lg border bg-card p-5 sm:p-6">
+    <h2 id="decision-history" tabIndex={-1} className="text-lg font-semibold">Previous QC decisions & rework history</h2>
+    <p className="mt-3 text-xs text-muted-foreground">Submitted records are immutable. Current draft findings never replace a historical decision.</p>
     {!history.length ? <p className="mt-5 text-sm text-muted-foreground">No submitted decisions. Draft findings are not QC outcomes.</p> :
     <ol className="mt-5 space-y-5">{history.map(record => <li key={record.id} className="rounded-md border p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3"><QCBadge status={record.decision} /><time className="text-xs text-muted-foreground" dateTime={record.submittedAt} title={record.submittedAt}>{dateLabel(record.submittedAt)}</time></div>

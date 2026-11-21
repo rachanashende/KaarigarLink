@@ -73,7 +73,7 @@ export function AppShell() {
       <header className="flex min-h-18 flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-3 sm:px-8 xl:px-12">
         <div className="flex items-center gap-3">
           <Button variant="outline" className="size-11 px-0 md:hidden" aria-label="Open navigation" aria-expanded={mobileOpen} aria-controls="mobile-navigation" onClick={() => setMobileOpen(true)}><Menu aria-hidden="true" className="size-5" /></Button>
-          <span className="text-sm font-semibold">{role.label} workspace</span><span className="hidden border-l pl-3 text-xs text-muted-foreground lg:inline">KaarigarLink</span>
+          <span className="text-sm font-semibold">{role.label}<span className="hidden sm:inline"> workspace</span></span><span className="hidden border-l pl-3 text-xs text-muted-foreground lg:inline">KaarigarLink</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <span className="flex size-9 items-center justify-center rounded-sm border border-primary/20 bg-secondary text-xs font-semibold text-primary" aria-hidden="true">{initials}</span>
@@ -81,7 +81,7 @@ export function AppShell() {
           <Button variant="outline" className="px-3" onClick={() => { setError(null); setLogoutOpen(true); }}><LogOut aria-hidden="true" className="size-4" /><span>Log out</span></Button>
         </div>
       </header>
-      <main id="main" tabIndex={-1} className={cn("kl-content mx-auto w-full outline-none", isBuyer && "buyer-workspace")}>
+      <main id="main" tabIndex={-1} className={cn("kl-content mx-auto w-full outline-none", isBuyer ? "buyer-workspace" : "role-workspace")} data-workspace-role={user.role}>
         <nav aria-label="Breadcrumb" className="mb-7"><ol className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><li><Link className="inline-flex min-h-11 items-center hover:text-primary" to={role.landing}>{role.label}</Link></li><li aria-hidden="true"><ChevronRight className="size-3" /></li><>{isOrderChild && <><li><Link className="inline-flex min-h-11 items-center hover:text-primary" to="/buyer/orders">Orders</Link></li><li aria-hidden="true"><ChevronRight className="size-3" /></li></>}{isJobChild && <><li><Link className="inline-flex min-h-11 items-center hover:text-primary" to="/buyer/jobs">Jobs</Link></li><li aria-hidden="true"><ChevronRight className="size-3" /></li></>}<li aria-current="page">{breadcrumb}</li></></ol></nav>
         <Suspense fallback={<LoadingState label="Loading page…" />}><Outlet /></Suspense>
       </main>

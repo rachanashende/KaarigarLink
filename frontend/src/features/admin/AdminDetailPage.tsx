@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
 import { EmptyState, ErrorState, LoadingState } from '@/components/feedback';
@@ -10,13 +10,13 @@ import { AdminBadge, JobsTable, OrdersTable, QualityTable, RecordLink, Productio
 import { OperationalAlerts } from './OperationalAlerts';
 
 function Facts({ rows }: { rows: [string, ReactNode][] }) {
-  return <dl className="grid gap-5 text-sm sm:grid-cols-2">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-2 break-words leading-relaxed">{value}</dd></div>)}</dl>;
+  return <dl className="role-facts grid gap-6 text-sm sm:grid-cols-2">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-2 break-words leading-relaxed">{value}</dd></div>)}</dl>;
 }
 function Missing({ section }: { section: AdminSection }) {
-  return <><PageHeader title="Record unavailable" description="No matching record exists in the current platform snapshot." /><Button asChild variant="outline"><Link to={'/admin/' + section}>Return to {sectionTitles[section].toLowerCase()}</Link></Button></>;
+  return <><WorkspaceHeader label="Admin / Platform operations" title="Record unavailable" description="No matching record exists in the current platform snapshot." /><Button asChild variant="outline"><Link to={'/admin/' + section}>Return to {sectionTitles[section].toLowerCase()}</Link></Button></>;
 }
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="rounded-lg border bg-card p-5 sm:p-6"><h2 className="mb-5 text-lg font-semibold">{title}</h2>{children}</section>;
+  return <section aria-label={title} className="role-surface border bg-card"><h2 className="mb-5 text-lg font-semibold">{title}</h2>{children}</section>;
 }
 export function AdminDetailPage({ section }: { section: AdminSection }) {
   const { id = '' } = useParams(); const query = useAdminOverview();
@@ -118,5 +118,5 @@ export function AdminDetailPage({ section }: { section: AdminSection }) {
       <OperationalAlerts alerts={alerts.filter(alert => alert.href === '/admin/quality/' + encodeURIComponent(id))} />
     </div>;
   }
-  return <><PageHeader title={title} description="Read-only platform record" action={<Button asChild variant="outline"><Link to={'/admin/' + section}>Back to {sectionTitles[section].toLowerCase()}</Link></Button>} />{content}</>;
+  return <><WorkspaceHeader label="Admin / Platform operations" title={title} description="Read-only platform record" action={<Button asChild variant="outline"><Link to={'/admin/' + section}>Back to {sectionTitles[section].toLowerCase()}</Link></Button>} />{content}</>;
 }

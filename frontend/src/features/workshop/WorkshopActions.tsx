@@ -44,7 +44,7 @@ function QuoteEditor({ job, invitationId, quote, onCancel, onSaved }: {
     catch { /* Keep the draft and show the actual service error in the confirmation. */ }
     finally { locked.current = false; }
   }
-  return <section className="mt-5 space-y-4 rounded-lg border bg-card p-5" aria-label="Mock quotation editor">
+  return <section className="role-quote-editor mt-5 space-y-4 border bg-card p-5" aria-label="Mock quotation editor">
     <h3 className="font-semibold">{quote ? 'Edit mock quotation' : 'Submit mock quotation'}</h3>
     <p className="text-sm text-muted-foreground">{job.title}. Amounts are INR totals. Production duration and cost breakdown are unavailable in the shared contract.</p>
     <form aria-label="Mock quotation form" noValidate onSubmit={event => { void form.handleSubmit(prepare)(event); }}>

@@ -1,8 +1,8 @@
 import type { ComponentProps } from 'react';
 import { PageHeader } from '@/components/PageHeader';
-import { SectionLabel } from '@/components/design-system';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import './buyer.css';
 
 export function BuyerHeader(props: ComponentProps<typeof PageHeader>) {
-  return <header className="buyer-heading"><SectionLabel>Buyer / Manufacturing workspace</SectionLabel><PageHeader {...props} /></header>;
+  return <WorkspaceHeader className="buyer-heading" label="Buyer / Manufacturing workspace" {...props} />;
 }
