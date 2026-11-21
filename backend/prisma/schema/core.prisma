@@ -117,6 +117,10 @@ model User {
   //   inspections   Inspection[]
 
   @@index([role])
+ordersAsBuyer Order[] @relation("BuyerOrders")
+inspections   Inspection[]
+ratingsGiven  Rating[] @relation("BuyerRatings")
+
 }
 
 model Workshop {
@@ -150,6 +154,9 @@ model Workshop {
   //   ratings Rating[]
 
   @@index([verificationStatus])
+quotes  Quote[]
+orders  Order[]
+ratings Rating[]
 }
 
 model Machine {
@@ -238,6 +245,8 @@ model Job {
   @@index([buyerId])
   @@index([status])
   @@index([manufacturingProcess, status])
+quotes Quote[]
+order  Order?
 }
 
 model JobRequirement {
@@ -279,4 +288,5 @@ model JobInvitation {
 
   @@unique([jobId, workshopId])
   @@index([workshopId, status])
+quotes Quote[]
 }
