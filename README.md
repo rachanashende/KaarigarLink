@@ -59,3 +59,11 @@ Buyer award, order creation, production/rework/QC submission, workshop payment/c
 The dedicated design/phase-9a-ampliflow branch introduces verified Ampliflow-inspired typography/color and shared shell/component styling, preserving all four-role workflows. Exact source values, app adaptations, fonts/licenses and motion rules are documented in [the Phase 9A specification](docs/phase-9a-design-specification.md). The existing /foundation route includes an isolated component specimen section; it performs no business mutation.
 
 See [Phase 9A verification](docs/phase-9a-verification.md) for actual checks, visual evidence and limits. No backend/domain/service change, new npm dependency or activation of blocked commands is part of this phase. Detailed marketplace browsing and individual business-page redesigns remain for later phases.
+
+## Phase 9A.5 public entry
+
+Anonymous visitors now see the public marketplace homepage at `/`. Its capability categories, five-stage workflow, participant sections and independent-quality explanation describe the existing demo without publishing private records or promising disabled transactions. Navigation anchors work on desktop and in the keyboard-accessible mobile dialog. All entry CTAs use `/login`; choose an existing demo role there.
+
+Authenticated `/` and `/login` visits still redirect to the current role dashboard. Existing protected routes, deep links, sessions and business permissions are preserved. The page reuses Phase 9A fonts, tokens, components and reduced-motion-aware transitions, with no new dependency or business contract.
+
+See [Phase 9A.5 verification](docs/phase-9a5-verification.md) for actual checks, responsive evidence, checker limitations and remaining Phase 9B work.

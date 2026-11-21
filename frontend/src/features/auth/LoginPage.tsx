@@ -25,9 +25,9 @@ export function LoginPage() {
   }
   return <main id="main" tabIndex={-1} className="grid min-h-dvh lg:grid-cols-[1fr_1.05fr]">
     <section className="flex flex-col justify-between bg-primary px-6 py-6 text-primary-foreground sm:px-12 lg:p-14">
-      <Link to="/login" aria-label="KaarigarLink home" className="flex min-h-11 w-fit items-center gap-3 text-xl font-semibold"><Factory aria-hidden="true" className="size-7" />KaarigarLink</Link>
+      <Link to="/" aria-label="KaarigarLink home" className="flex min-h-11 w-fit items-center gap-3 text-xl font-semibold"><Factory aria-hidden="true" className="size-7" />KaarigarLink</Link>
       <div className="hidden max-w-lg py-10 lg:block lg:py-20">
-        <p className="mb-5 flex items-center gap-2 text-sm"><span className="size-2 bg-accent" />Manufacturing, connected</p>
+        <p className="mb-5 flex items-center gap-2 text-sm"><span className="size-2 bg-primary-foreground" />Manufacturing, connected</p>
         <p className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl lg:text-5xl">Good work starts with the right connection.</p>
         <p className="mt-6 max-w-md text-base leading-relaxed">A shared workspace for buyers, manufacturing workshops and independent quality teams.</p>
         <div className="mt-10 hidden border-t border-primary-foreground/25 pt-6 lg:block">
@@ -57,7 +57,7 @@ export function LoginPage() {
         </form>
         {error && <p role="alert" className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
         <div className="mt-8 border-t pt-6">
-          <h3 className="text-sm font-semibold">Explore a demo workspace</h3>
+          <h2 className="text-sm font-semibold">Explore a demo workspace</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Choose a role. No registration or real data required.</p>
           <div className="mt-4 grid grid-cols-2 gap-3">{roleOrder.map(role => <Button key={role} variant="outline" disabled={pending !== null} onClick={() => authenticate(() => demoSignIn(role), role)}>{pending === role ? 'Opening…' : roles[role].label}</Button>)}</div>
           <details className="mt-4 text-xs leading-relaxed text-muted-foreground"><summary className="flex min-h-11 cursor-pointer items-center underline decoration-border underline-offset-4">View demo credentials</summary><p>Use buyer, workshop, inspector or admin @kaarigarlink.example with password <span className="font-semibold">DemoPass123!</span>. Example: buyer@kaarigarlink.example.</p></details>

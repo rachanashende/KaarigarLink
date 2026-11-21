@@ -6,6 +6,7 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { LoadingState, UnauthorizedState } from '@/components/feedback';
 import { Button } from '@/components/ui/button';
 import { AppShell } from './AppShell';
+const LandingPage = lazy(() => import('@/features/landing/LandingPage').then(module => ({ default: module.LandingPage })));
 const FoundationPage = lazy(() => import('./FoundationPage').then(module => ({ default: module.FoundationPage })));
 import { roles, roleOrder, workshopNavigation } from './roles';
 
@@ -32,7 +33,7 @@ const AdminDetailPage = lazy(() => import('@/features/admin/AdminDetailPage').th
 
 function HomeRedirect() {
   const { user } = useAuth();
-  return <Navigate to={user ? roles[user.role].landing : '/login'} replace />;
+  return user ? <Navigate to={roles[user.role].landing} replace /> : <Suspense fallback={<LoadingState label="Loading KaarigarLink..." />}><LandingPage /></Suspense>;
 }
 function RequireSession() {
   const { user } = useAuth();
@@ -51,7 +52,7 @@ function RouteFocus() {
   const { pathname } = useLocation();
   const previous = useRef(pathname);
   useEffect(() => {
-    document.title = 'KaarigarLink · ' + (pathname === '/login' ? 'Sign in' : pathname === '/foundation' ? 'Frontend foundation' : 'Workspace');
+    document.title = 'KaarigarLink · ' + (pathname === '/' ? 'Manufacturing connections' : pathname === '/login' ? 'Sign in' : pathname === '/foundation' ? 'Frontend foundation' : 'Workspace');
     if (previous.current !== pathname) {
       window.scrollTo(0, 0);
       document.getElementById('main')?.focus({ preventScroll: true });
