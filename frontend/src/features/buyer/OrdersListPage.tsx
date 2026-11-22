@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { DataTable } from '@/components/DataTable';
 import { EmptyState, ErrorState } from '@/components/feedback';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,7 @@ export function OrdersListPage() {
       { key: 'workshop', header: 'Workshop', cell: item => <span className="block min-w-36">{item.workshop.name}</span> },
       { key: 'value', header: 'Order value', cell: item => <span className="whitespace-nowrap font-medium tabular-nums">{moneyLabel(item.quote.amount)}</span> },
       { key: 'status', header: 'Status', cell: item => <OrderBadge status={item.order.status} /> },
+      { key: 'quality', header: 'Quality inspection', cell: item => <span className="block min-w-32 text-xs">{item.order.qcStatus === 'REWORK' ? 'Rework requested' : item.order.qcStatus === 'ACCEPTED' ? 'Accepted' : item.order.qcStatus === 'PENDING' ? 'QC pending' : 'Not recorded'}</span> },
       { key: 'delivery', header: 'Expected delivery', cell: item => <span className="whitespace-nowrap">{dateLabel(item.quote.estimatedDelivery)}</span> },
       { key: 'progress', header: 'Production', cell: item => <OrderProgress milestones={item.order.milestones} /> },
     ]} /> : <EmptyState title={query.data.length ? 'No orders match these filters' : 'No orders yet'} description={query.data.length ? 'Search another order, job or workshop, or clear the filters.' : 'Orders will appear once an approved award workflow is available. Browse your manufacturing jobs.'} action={query.data.length ? <Button variant="outline" onClick={() => setParams({}, { replace: true })}>Clear filters</Button> : <Button asChild variant="outline"><Link to="/buyer/jobs">View jobs</Link></Button>} />}

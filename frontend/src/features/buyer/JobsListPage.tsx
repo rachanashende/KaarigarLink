@@ -1,9 +1,9 @@
 import { Link, useSearchParams } from 'react-router';
 import { Plus } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState } from '@/components/feedback';
-import { useBuyerJobs } from './queries';
+import { useBuyerDashboard, useBuyerJobs } from './queries';
 import { filterJobs, jobStatuses, type JobSort } from './model';
 import { JobsTable } from './JobsTable';
 import { BuyerLoading } from './BuyerLoading';
@@ -11,6 +11,7 @@ import { jobControlClass } from './JobField';
 
 export function JobsListPage() {
   const query = useBuyerJobs();
+  const overview = useBuyerDashboard();
   const [params, setParams] = useSearchParams();
   const search = params.get('q') ?? '';
   const requestedStatus = params.get('status') ?? 'all';
@@ -32,7 +33,7 @@ export function JobsListPage() {
       <div><label htmlFor="job-sort" className="mb-2 block text-sm font-medium">Sort jobs</label><select id="job-sort" className={jobControlClass} value={sort} onChange={event => updateFilter('sort', event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="deadline">Deadline: soonest</option><option value="deadline-desc">Deadline: latest</option></select></div>
     </div>
     <p role="status" className="mb-4 text-sm text-muted-foreground">{jobs.length} of {query.data.length} jobs</p>
-    {!query.data.length ? <EmptyState title="No manufacturing jobs yet" description="Post your first requirement to keep your manufacturing brief and delivery details together." action={action} /> : jobs.length ? <JobsTable jobs={jobs} /> : <EmptyState title="No jobs match these filters" description="Try another title or clear the filters to see your jobs." action={<Button variant="outline" onClick={() => setParams({}, { replace: true })}>Clear filters</Button>} />}
+    {!query.data.length ? <EmptyState title="No manufacturing jobs yet" description="Post your first requirement to keep your manufacturing brief and delivery details together." action={action} /> : jobs.length ? <JobsTable jobs={jobs} {...(overview.data ? { quotes: overview.data.quotes } : {})} /> : <EmptyState title="No jobs match these filters" description="Try another title or clear the filters to see your jobs." action={<Button variant="outline" onClick={() => setParams({}, { replace: true })}>Clear filters</Button>} />}
     <p className="mt-5 text-xs text-muted-foreground">Mock workspace · development data is saved on this browser; production demo builds are memory-only. Reset demo data from Manufacturing orders.</p>
   </>;
 }

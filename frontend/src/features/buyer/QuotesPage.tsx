@@ -1,8 +1,9 @@
+import { JobRequirementSummary } from './JobRequirementSummary';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import type { BuyerQuotesData } from '@/services/marketplace';
 import type { Workshop } from '@/types';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -13,7 +14,7 @@ import { JobWorkspaceNav } from './JobWorkspaceNav';
 import { WorkshopDetails } from './WorkshopDetails';
 import { QuoteDetailsDialog, AwardReviewDialog } from './QuoteDialogs';
 import { dateLabel, moneyLabel } from './model';
-import { sortQuotes, quoteLabels, type QuoteSort } from './quoteModel';
+import { quoteRange, sortQuotes, quoteLabels, type QuoteSort } from './quoteModel';
 import { jobControlClass } from './JobField';
 
 export function QuotesPage() {
@@ -30,13 +31,16 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const rows = sortQuotes(data.quotations, sort);
+  const range = quoteRange(rows);
   const selected = data.quotations.filter(entry => selection.includes(entry.quote.id));
+  const selectedRange = quoteRange(selected);
   const details = data.quotations.find(entry => entry.quote.id === detailsId) ?? null;
   const review = data.quotations.find(entry => entry.quote.id === reviewId) ?? null;
   return <>
     <PageHeader title="Compare quotations" description={data.job.title} action={<StatusBadge tone="warning">Demo quotations</StatusBadge>} />
-    <JobWorkspaceNav jobId={data.job.id} />
-    <div className="mb-6 rounded-lg border border-accent bg-accent/10 p-4 text-sm leading-relaxed">{data.awardBlocker}</div>
+    <JobWorkspaceNav jobId={data.job.id} /><JobRequirementSummary job={data.job} />
+    <aside aria-label="Awarding restriction" className="mb-6 border-l-2 border-primary bg-muted p-5 text-sm leading-relaxed"><p className="mb-2 font-semibold">Awarding unavailable</p>{data.awardBlocker}</aside>
+    {range && <section aria-label="Quotation range"><dl className="buyer-offer-summary"><div><dt>Quoted amount range / INR</dt><dd>{moneyLabel(range.min)} to {moneyLabel(range.max)}</dd></div><div><dt>Earliest delivery commitment</dt><dd>{dateLabel(range.earliest)}</dd></div><div><dt>Latest delivery commitment</dt><dd>{dateLabel(range.latest)}</dd></div></dl><p className="mb-6 text-xs text-muted-foreground">All listed statuses included. Delivery dates are commitments, not calculated lead times. Compare status and terms before reviewing an offer.</p></section>}
     {!rows.length ? <EmptyState title="No quotations yet" description="Invite eligible workshops to review this brief. Quotations will appear here when available." action={<Button asChild variant="outline"><Link to={'/buyer/jobs/' + encodeURIComponent(data.job.id) + '/matches'}>View workshop matches</Link></Button>} /> : <>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div><p id="compare-selection-note" role="status" className="text-sm font-medium">{selected.length} of 3 quotations selected for comparison</p><p className="mt-2 text-xs text-muted-foreground">{rows.length} quotations for this job · amounts in INR</p></div>
@@ -58,10 +62,10 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
         { key: 'notes', header: 'Notes', cell: entry => <p className="min-w-44 max-w-60 text-xs leading-relaxed text-muted-foreground">{entry.quote.notes || 'No notes provided.'}</p> },
         { key: 'actions', header: 'Actions', cell: entry => <div className="min-w-40 space-y-2"><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setDetailsId(entry.quote.id)}>View quote</Button><Button disabled={!entry.canReviewAward} aria-describedby={!entry.canReviewAward ? 'review-reason-' + entry.quote.id : undefined} onClick={() => setReviewId(entry.quote.id)}>Review award</Button></div>{!entry.canReviewAward && <p id={'review-reason-' + entry.quote.id} className="text-xs leading-relaxed text-muted-foreground">{entry.reviewReason}</p>}</div> },
       ]} />
-      {selected.length > 0 && <section id="quote-comparison" tabIndex={-1} aria-labelledby="comparison-heading" className="mt-8 scroll-mt-6">
+      {selected.length > 0 && <section id="quote-comparison" tabIndex={-1} aria-labelledby="comparison-heading" className="buyer-comparison mt-8 scroll-mt-6">
         <h2 id="comparison-heading" className="mb-5 text-xl font-semibold">Selected quotation comparison</h2>
         <div className={selected.length === 1 ? 'grid max-w-xl gap-4' : selected.length === 2 ? 'grid items-stretch gap-4 md:grid-cols-2' : 'grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3'}>{selected.map(entry => <article key={entry.quote.id} aria-label={'Compare ' + entry.workshop.name} className="min-w-0 rounded-lg border bg-card p-5">
-          <h3 className="text-lg font-semibold">{entry.workshop.name}</h3><p className="mt-2 text-xs text-muted-foreground">{entry.workshop.location.city}, {entry.workshop.location.state}</p>
+          <h3 className="text-lg font-semibold">{entry.workshop.name}</h3>{selectedRange && <p className="buyer-offer-difference">{entry.quote.amount === selectedRange.min ? 'Lowest amount among selected offers.' : moneyLabel(entry.quote.amount - selectedRange.min) + ' above the lowest selected amount.'} {entry.quote.estimatedDelivery === selectedRange.earliest ? 'Earliest delivery among selected offers.' : 'Delivery later than ' + dateLabel(selectedRange.earliest) + '.'} Compare terms and status; this is not an award recommendation.</p>}<p className="mt-2 text-xs text-muted-foreground">{entry.workshop.location.city}, {entry.workshop.location.state}</p>
           <dl className="mt-5 divide-y text-sm">{[
             ['Amount (INR)', moneyLabel(entry.quote.amount)], ['Delivery', dateLabel(entry.quote.estimatedDelivery)],
             ['Status', quoteLabels[entry.quote.status]], ['Capabilities', entry.workshop.capabilities.join(', ')],

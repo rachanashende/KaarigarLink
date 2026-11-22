@@ -1,0 +1,57 @@
+/* Operational composition for the three remaining roles; Buyer keeps its verified scoped layout. */
+.role-workspace .workspace-heading > .kl-label { margin-bottom: 24px; }
+.role-workspace .kl-page-header { gap: 24px; align-items: end; padding-bottom: 32px; margin-bottom: 32px; }
+.role-workspace .kl-page-title { max-width: 1000px; font-size: clamp(34px,4.2vw,64px); }
+.role-workspace :is(h2,h3) { letter-spacing: -.025em; }
+.role-workspace section > h2 { font-size: 22px; line-height: 1.2; font-weight: 600; }
+.role-workspace :is(section,article,.kl-table) { border-radius: 0; }
+.role-workspace [role=search] { border-inline: 0; background: var(--muted); padding: 24px; gap: 24px; border-radius: 0; }
+.role-workspace .kl-table thead { font-family: var(--font-code); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.role-workspace .kl-table :is(th,td) { padding-inline: 16px; }
+.role-workspace .kl-table td { padding-block: 24px; }
+.role-workspace .role-surface { border-top: 2px solid var(--foreground); padding: clamp(20px,3vw,32px); }
+.role-workspace .role-facts { padding: clamp(20px,3vw,32px); border-radius: 0; }
+.role-facts dt { font-size: 11px; color: var(--muted-foreground); }
+.role-facts dd { overflow-wrap: anywhere; }
+.role-workspace .role-boundary { padding: 20px 24px; border: 0; border-left: 2px solid var(--primary); background: var(--muted); }
+.role-workspace .role-boundary > h2 { font-size: 16px; }
+.role-workspace .role-boundary p { max-width: 80ch; }
+.role-intro { margin-bottom: 32px; max-width: 850px; font-size: clamp(28px,3.4vw,48px); font-weight: 600; line-height: 1.12; letter-spacing: -.035em; }
+.role-intro em { color: var(--primary); font-weight: 400; }
+.role-task-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; gap: 32px; }
+.role-task-panel { min-width: 0; border-top: 2px solid var(--foreground); padding-top: 24px; }
+.role-task-panel > h2 { font-size: 22px; font-weight: 600; }
+.role-task-panel > p { margin-top: 12px; color: var(--muted-foreground); font-size: 13px; line-height: 1.7; }
+.role-task-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; padding-block: 16px; border-bottom: 1px solid var(--border); }
+.role-task-row > div { min-width: 0; }
+.role-task-row a { display: inline-flex; align-items: center; min-height: 44px; color: var(--primary); font-size: 14px; font-weight: 600; }
+.role-task-row a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.role-task-row p { font-size: 12px; line-height: 1.7; color: var(--muted-foreground); }
+.role-workspace .role-task-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; border-block: 1px solid var(--border); padding-block: 12px; margin-block: 24px 32px; }
+.role-task-nav a { display: inline-flex; min-height: 44px; align-items: center; color: var(--primary); font-size: 14px; font-weight: 500; }
+.role-task-nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.role-workspace .role-quote-editor { border-top: 2px solid var(--primary); width: clamp(224px,35vw,480px); max-width: 100%; }
+.role-quote-editor h3 { font-size: 20px; line-height: 1.3; }
+.role-quote-editor form { margin-top: 24px; }
+.role-workspace .role-qc-checks { border-top: 2px solid var(--foreground); padding: clamp(20px,3vw,40px); }
+.role-qc-checks fieldset > div { border-radius: 0; }
+.role-qc-outcome { border-top: 2px solid var(--primary); background: var(--muted); padding: 24px; }
+.role-qc-outcome > p { font-size: 13px; color: var(--muted-foreground); line-height: 1.7; margin-bottom: 24px; max-width: 80ch; }
+.role-qc-outcome > div + div { margin-top: 24px; }
+.role-workspace .role-history { border-top: 2px solid var(--primary); }
+.role-workspace .role-management { border-bottom: 1px solid var(--border); padding-bottom: 24px; }
+@media (max-width: 1023px) { .role-task-grid { grid-template-columns: 1fr; } }
+@media (max-width: 767px) {
+  .role-workspace [role=search] { padding: 20px 12px; }
+  .role-workspace .role-boundary { padding: 20px; }
+  .role-qc-outcome { padding: 20px 16px; }
+}
+.role-workspace .role-surface > .role-facts { padding: 0; }
+.role-workspace :is(#qc-order,#qc-checklist,#decision-history) { scroll-margin-top: 24px; }
+
+.role-task-row { align-items: flex-start; }
+
+.role-directory-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.role-directory-grid .kl-card { min-width: 0; }
+.role-directory-grid .kl-button { white-space: normal; text-align: left; }
+@media (max-width: 767px) { .role-directory-grid { grid-template-columns: 1fr; } }

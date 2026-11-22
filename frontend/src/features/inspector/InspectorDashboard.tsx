@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { StatCard } from '@/components/StatCard';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/feedback';
@@ -11,7 +11,7 @@ import { todayInIndia } from '@/services/jobs';
 
 export function InspectorDashboard() {
   const query = useInspections();
-  const header = <PageHeader title="Inspector workspace" description="Record human inspection findings, review quality requirements and follow up on rework." action={<Button asChild variant="outline"><Link to="/inspector/inspections">All inspections</Link></Button>} />;
+  const header = <WorkspaceHeader label="Inspector / Independent quality" title="Inspector workspace" description="Record human inspection findings, review quality requirements and follow up on rework." action={<Button asChild variant="outline"><Link to="/inspector/inspections">All inspections</Link></Button>} />;
   if (query.isPending) return <>{header}<LoadingState label="Loading assigned inspections…" /></>;
   if (query.isError) return <>{header}<ErrorState message={query.error.message} onRetry={() => { void query.refetch(); }} /></>;
   const data = query.data; const stats = inspectionStats(data);
@@ -19,7 +19,8 @@ export function InspectorDashboard() {
   const upcoming = attention.filter(item => (followUpDate(item) ?? '') >= todayInIndia()).slice(0, 4);
   const completed = inspectionHistory(data).slice(0, 4);
   const activity = data.flatMap(item => item.activity).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 5);
-  return <>{header}<DemoDataNotice />
+  return <>{header}<p className="role-intro">Independent findings.<br />Accountable <em>quality decisions.</em></p><DemoDataNotice />
+    <nav aria-label="Inspection priorities" className="role-task-nav"><Link to="/inspector/inspections?status=PENDING">Review pending inspections</Link><Link to="/inspector/inspections?status=overdue">Inspect overdue assignments</Link><Link to="/inspector/rework">Follow up on rework</Link><Link to="/inspector/history">Read submitted decisions</Link></nav>
     <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
       <StatCard label="Total assigned inspections" value={stats.total} detail="Your assignments only" />
       <StatCard label="Pending inspections" value={stats.pending} detail="Awaiting human findings" />

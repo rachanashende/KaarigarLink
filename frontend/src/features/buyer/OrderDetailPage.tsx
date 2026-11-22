@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/feedback';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -53,6 +53,7 @@ export function OrderDetailPage({ reviewOnly = false }: { reviewOnly?: boolean }
       {data.inspections.length ? <ul className="mt-5 divide-y">{data.inspections.map(inspection => <li key={inspection.id} className="py-4 first:pt-0 last:pb-0"><p className="text-sm font-semibold">{inspection.decision === 'REWORK' ? 'Rework requested' : inspection.decision === 'ACCEPTED' ? 'Accepted' : 'QC pending'}</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{inspection.notes || 'No inspector notes recorded.'}</p>{inspection.history?.at(-1)?.submittedAt && <p className="mt-3 text-xs text-muted-foreground">Decision recorded: {dateLabel(inspection.history.at(-1)?.submittedAt)}</p>}{inspection.reworkDeadline && <p className="mt-3 text-sm font-medium">Rework deadline: {dateLabel(inspection.reworkDeadline)}</p>}</li>)}</ul> : <p className="mt-5 text-sm text-muted-foreground">No inspection records available.</p>}
       <p className="mt-4 text-xs text-muted-foreground">Latest QC outcome above comes from the order summary. Inspector findings are human-recorded; production status is separate. Draft findings are not shared with buyers.</p>
     </section>
+    <section aria-labelledby="payment-status" className="buyer-payment"><h2 id="payment-status">Payment status</h2><p>{order.status === 'PAID' ? 'The historical order lifecycle is marked Paid. No separate payment record is supplied.' : 'No separate payment record is supplied for this order. Production completion and QC acceptance do not confirm payment.'} Payment updates are unavailable in this buyer workspace.</p></section>
     <div className="mt-6"><OrderReview key={id} data={data} /></div>
     <section aria-labelledby="order-activity" className="mt-6 rounded-lg border bg-card p-5 sm:p-6">
       <h2 id="order-activity" className="text-lg font-semibold">Order activity</h2>

@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ErrorState, LoadingState, EmptyState } from '@/components/feedback';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
@@ -15,7 +15,7 @@ export function InspectionsPage({ view = 'list' }: { view?: 'list' | 'rework' | 
     setParams(previous => { const next = new URLSearchParams(previous); if (value && value !== 'all' && value !== 'soonest') next.set(key, value); else next.delete(key); return next; }, { replace: true });
   }
   const title = view === 'rework' ? 'Rework follow-up' : view === 'history' ? 'Inspection history' : 'Assigned inspections';
-  const header = <PageHeader title={title} description={view === 'rework' ? 'Track corrective work without changing workshop-owned tasks. Reinspection remains pending backend support.' : view === 'history' ? 'Submitted human decisions remain separate from draft findings.' : 'Review only the inspections assigned to your account.'} />;
+  const header = <WorkspaceHeader label="Inspector / Independent quality" title={title} description={view === 'rework' ? 'Track corrective work without changing workshop-owned tasks. Reinspection remains pending backend support.' : view === 'history' ? 'Submitted human decisions remain separate from draft findings.' : 'Review only the inspections assigned to your account.'} />;
   if (query.isPending) return <>{header}<LoadingState label="Loading assigned inspections…" /></>;
   if (query.isError) return <>{header}<ErrorState message={query.error.message} onRetry={() => { void query.refetch(); }} /></>;
   const source = query.data.filter(item => view !== 'rework' || item.inspection.decision === 'REWORK');
@@ -23,6 +23,7 @@ export function InspectionsPage({ view = 'list' }: { view?: 'list' | 'rework' | 
   const history = inspectionHistory(rows);
   if (view === 'history' && params.get('sort') === 'oldest') history.reverse();
   return <>{header}
+    {view === 'history' && <aside aria-label="Submitted record policy" className="role-boundary mb-6 text-sm">Immutable submitted decisions. Open an inspection to read its full findings and evidence metadata; this history has no editing action.</aside>}
     <div role="search" aria-label="Filter inspections" className="mb-5 grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr]">
       <div><label className="mb-2 block text-sm font-medium" htmlFor="qc-search">Search inspections, orders, jobs or workshops</label><input id="qc-search" type="search" className={controlClass} value={search} onChange={event => update('q', event.target.value)} /></div>
       <div><label className="mb-2 block text-sm font-medium" htmlFor="qc-filter">{view === 'rework' ? 'Follow-up status' : 'QC status'}</label><select id="qc-filter" className={controlClass} value={status} onChange={event => update('status', event.target.value)}><option value="all">All {view === 'rework' ? 'rework cases' : 'statuses'}</option>{view !== 'rework' && Object.entries(qcLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}{view !== 'history' && <option value="overdue">Overdue</option>}</select></div>
@@ -33,7 +34,7 @@ export function InspectionsPage({ view = 'list' }: { view?: 'list' | 'rework' | 
     view === 'list' ? <InspectionTable items={rows} /> :
     view === 'rework' ? <DataTable caption="Assigned rework cases" rows={rows} rowKey={item => item.inspection.id} columns={[
       { key: 'order', header: 'Order / workshop', cell: item => <div className="min-w-48"><Link className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline" to={'/inspector/inspections/' + item.inspection.id}>{item.order.id}</Link><p className="text-xs text-muted-foreground">{item.workshop.name}</p></div> },
-      { key: 'reason', header: 'Rework reason', cell: item => { const latest = item.inspection.history?.at(-1); return <p className="min-w-56 whitespace-pre-wrap text-sm leading-relaxed">{latest?.decision === 'REWORK' ? latest.reason : item.inspection.notes}</p>; } },
+      { key: 'reason', header: 'Rework reason', cell: item => { const latest = item.inspection.history?.at(-1); return <div className="min-w-56 max-w-md whitespace-pre-wrap text-sm leading-relaxed"><p>{latest?.decision === 'REWORK' ? latest.reason : item.inspection.notes}</p>{latest?.decision === 'REWORK' && <p className="mt-3 text-xs text-muted-foreground"><strong>Corrective action:</strong> {latest.correctiveAction}</p>}</div>; } },
       { key: 'date', header: 'Requested', cell: item => dateLabel(item.inspection.history?.at(-1)?.submittedAt) },
       { key: 'deadline', header: 'Rework deadline', cell: item => <div className="min-w-28"><p>{dateLabel(item.inspection.reworkDeadline)}</p>{isOverdue(item) && <p className="mt-2 font-medium text-destructive">Overdue</p>}</div> },
       { key: 'followup', header: 'Current status / next inspection', cell: () => <p className="min-w-56 text-sm leading-relaxed">Awaiting workshop corrective work. Follow-up inspection required; scheduling is pending backend support.</p> },

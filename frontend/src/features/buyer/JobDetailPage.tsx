@@ -1,7 +1,7 @@
 import { JobWorkspaceNav } from './JobWorkspaceNav';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, FileText, Plus, X } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/feedback';
 import { ServiceError } from '@/services';

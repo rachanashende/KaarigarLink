@@ -109,3 +109,15 @@ Admin reuses the existing shell, palette, Public Sans, status badges, tables, pa
 Directories provide labelled search/filter/sort and native record links. Stacked links remain separate targets; email columns preserve readable widths inside scrollable table regions. Deep records reuse consistent fact panels and related tables, with production and QC explicitly distinct. Unsupported fields/actions are identified without inventing verification/account states.
 
 All Admin feature routes are lazy-loaded. No charting dependency, gradient, motion kit or global shell redesign was added. Screenshot/browser checks cover 320–1440px and keyboard navigation. Marketing hero/effect gates remain outside this operational scope.
+
+## Phase 9A - current shared presentation
+
+Earlier palettes describe historical phases. The current dedicated design branch uses Inter (including a real italic face), Geist Mono, white canvas, ink #0D0F14, cobalt #2F37D9 and slate #51556A, verified from the primary reference screenshot and Ampliflow public CSS. See [the full specification](phase-9a-design-specification.md) for provenance and explicitly approximated app values. Fonts are self-hosted under frontend/public/fonts with SIL OFL license texts; no runtime font CDN is required.
+
+Use styles/globals.css variables and theme aliases rather than reintroducing page-specific branding. PageHeader is the operational heading, EditorialHeading is reserved for explicit editorial contexts, SectionLabel is the outlined mono label. Existing Button, FormField/controlClass, DataTable, StatCard, StatusBadge and Dialog APIs retain their behavior. Shared design-system.tsx supplies Card, SearchField, native FilterPanel, NavigationTabs, Notice and bounded Pagination. NavigationTabs are links with aria-current, not an ARIA tab widget without keyboard semantics.
+
+Use the canonical shell for every role. Navigation, authentication, role guard and business services are unchanged. JobWorkspaceNav composes the shared link tabs with its original URLs. Specimens live on /foundation; its original Phase 0 content remains historical and its existing tests are preserved. No live marketplace record is created by the specimen controls.
+
+Motion tokens: hover 150ms, press 90ms, panel/entrance 200ms, indicator 240ms; ease cubic-bezier(.2,.8,.2,1). Only actionable elements move on hover; static data cards remain still. Transitions use opacity/transform and colors, not layout dimensions. Reduced motion disables transitions/animations, retains current-state markers and keeps all content readable. Native modal closing is immediate so focus restoration and task completion are not delayed.
+
+Dense page compositions, new discovery collections, matching-card redesigns and feature-specific forms/tracking/QC/admin layouts are reserved for later phases. Shared styling may change their typography, controls, borders and status presentation; it must not change a state transition or unlock a blocked business action.

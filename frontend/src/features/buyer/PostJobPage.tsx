@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { FileText, Plus, X } from 'lucide-react';
 import { useServices } from '@/app/services';
 import { useAuth } from '@/features/auth/context';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/feedback';
 import { todayInIndia } from '@/services/jobs';
@@ -41,10 +41,11 @@ export function PostJobPage() {
   }
   return <>
     <PageHeader title="Post a manufacturing job" description="Give workshops a clear brief: what to make, how much, and when you need it." />
+    <nav aria-label="Manufacturing brief sections" className="buyer-form-guide"><a href="#job-brief"><span>01</span> Describe the work</a><a href="#quantity-delivery"><span>02</span> Quantity and delivery</a><a href="#design-files"><span>03</span> Design references</a></nav>
     <form noValidate aria-busy={mutation.isPending} onSubmit={event => { void handleSubmit(submit)(event); }} className="max-w-4xl">
       <fieldset disabled={mutation.isPending || mutation.isSuccess} className="space-y-6">
         <section aria-labelledby="job-brief" className="rounded-lg border bg-card p-5 sm:p-7">
-          <h2 id="job-brief" className="text-lg font-semibold">Manufacturing brief</h2><p className="mt-2 text-sm text-muted-foreground">All fields are required unless marked optional.</p>
+          <h2 id="job-brief" tabIndex={-1} className="text-lg font-semibold">Manufacturing brief</h2><p className="mt-2 text-sm text-muted-foreground">All fields are required unless marked optional.</p>
           <div className="mt-6 space-y-5">
             <JobField id="title" label="Job title" error={errors.title?.message}>{props => <input {...props} {...register('title')} maxLength={140} className={jobControlClass} />}</JobField>
             <JobField id="capability" label="Manufacturing capability" hint="For example, CNC machining or sheet metal fabrication." error={errors.capability?.message}>{props => <input {...props} {...register('capability')} maxLength={120} list="manufacturing-capabilities" className={jobControlClass} />}</JobField>
@@ -58,7 +59,7 @@ export function PostJobPage() {
           </div>
         </section>
         <section aria-labelledby="quantity-delivery" className="rounded-lg border bg-card p-5 sm:p-7">
-          <h2 id="quantity-delivery" className="text-lg font-semibold">Quantity & delivery</h2>
+          <h2 id="quantity-delivery" tabIndex={-1} className="text-lg font-semibold">Quantity & delivery</h2>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <JobField id="quantity" label="Quantity" error={errors.quantity?.message}>{props => <input {...props} {...register('quantity', { valueAsNumber: true })} type="number" inputMode="decimal" step="any" className={jobControlClass} />}</JobField>
             <JobField id="unit" label="Unit of measurement" error={errors.unit?.message}>{props => <input {...props} {...register('unit')} list="job-units" maxLength={40} className={jobControlClass} />}</JobField>
@@ -70,7 +71,7 @@ export function PostJobPage() {
           </div>
         </section>
         <section aria-labelledby="design-files" className="rounded-lg border bg-card p-5 sm:p-7">
-          <h2 id="design-files" className="text-lg font-semibold">Design references</h2>
+          <h2 id="design-files" tabIndex={-1} className="text-lg font-semibold">Design references</h2>
           <p className="mt-2 mb-5 text-sm leading-relaxed text-muted-foreground">Simulated attachment only. File names, types and sizes are recorded; contents are not uploaded or retained. Choose up to 5 files, 10 MB each. Use non-sensitive demo files.</p>
           <JobField id="attachments" label="Design files" optional error={errors.designFiles ? (errors.designFiles.message ?? 'Check file metadata: up to 5 files, 10 MB each.') : undefined}>{props => <input {...props} ref={fileInput} type="file" multiple className={jobControlClass + ' file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm file:text-primary'} onChange={event => {
             setValue('designFiles', Array.from(event.target.files ?? []).map(file => ({ id: crypto.randomUUID(), name: file.name, mediaType: file.type || 'application/octet-stream', sizeBytes: file.size })), { shouldValidate: true, shouldDirty: true });

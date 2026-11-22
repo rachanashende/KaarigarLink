@@ -39,8 +39,8 @@ export function QCChecklist({ data }: { data: InspectorInspectionData }) {
   }
   const busy = save.isPending || submit.isPending;
   const confirmation = pending ? (pending.decision === 'ACCEPTED' ? 'Accept this inspection?' : 'Request workshop rework?') + ' ' + pending.findings.items.filter(item => item.result === 'PASS').length + ' passed; ' + pending.findings.items.filter(item => item.result === 'FAIL').length + ' failed. Summary: ' + pending.findings.summary + (pending.decision === 'REWORK' ? ' Reason: ' + pending.reason + ' Corrective action: ' + pending.correctiveAction + ' Deadline: ' + pending.reworkDeadline + '.' : '') + ' This mock command records human findings; it does not change production, payment or closure status.' : '';
-  return <section aria-labelledby="qc-checklist" className="rounded-lg border bg-card p-5 sm:p-6">
-    <h2 id="qc-checklist" className="text-lg font-semibold">Inspection checklist</h2>
+  return <section aria-labelledby="qc-checklist" className="role-qc-checks rounded-lg border bg-card p-5 sm:p-6">
+    <h2 id="qc-checklist" tabIndex={-1} className="text-lg font-semibold">Inspection checklist</h2>
     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Record your human inspection findings against the supplied requirements. KaarigarLink does not physically verify manufacturing quality.</p>
     {notice && <p role="status" className="mt-4 rounded-md border bg-secondary p-4 text-sm">{notice}</p>}
     {!data.canDecide ? <p className="mt-5 text-sm text-muted-foreground">{data.decisionReason}</p> :
@@ -63,12 +63,14 @@ export function QCChecklist({ data }: { data: InspectorInspectionData }) {
           </div>;
         })}
         <FormField id="qc-summary" label="Overall inspection summary" hint="At least 10 characters before submitting a decision." error={errors.findings}>{props => <textarea {...props} rows={4} maxLength={4000} className={controlClass} value={findings.summary} onChange={event => { setFindings(previous => ({ ...previous, summary: event.target.value })); setDirty(true); setNotice(''); }} />}</FormField>
+        <section aria-label="Proposed QC outcome" className="role-qc-outcome"><p>Choose an inspection outcome after recording your findings. Acceptance cannot include failed checks; rework needs a failed finding, a reason, corrective action and a future deadline.</p>
         <FormField id="qc-decision" label="Proposed QC decision">{props => <select {...props} className={controlClass} value={decision} onChange={event => setDecision(event.target.value as 'ACCEPTED' | 'REWORK')}><option value="ACCEPTED">Accept inspection</option><option value="REWORK">Request rework</option></select>}</FormField>
         {decision === 'REWORK' && <div className="grid gap-5 rounded-md border border-destructive/30 p-5">
           <FormField id="rework-reason" label="Rework reason" error={errors.reason}>{props => <textarea {...props} rows={3} maxLength={4000} className={controlClass} value={reason} onChange={event => setReason(event.target.value)} />}</FormField>
           <FormField id="corrective-action" label="Corrective action notes" error={errors.correctiveAction}>{props => <textarea {...props} rows={3} maxLength={4000} className={controlClass} value={correctiveAction} onChange={event => setCorrectiveAction(event.target.value)} />}</FormField>
           <FormField id="rework-deadline" label="Rework deadline" error={errors.reworkDeadline} hint="A future calendar date in India time is required.">{props => <input {...props} type="date" className={controlClass} value={deadline} onChange={event => setDeadline(event.target.value)} />}</FormField>
         </div>}
+        </section>
         <div className="flex flex-wrap gap-3 border-t pt-5"><Button variant="outline" onClick={() => { save.reset(); setNotice(''); save.mutate(); }}>{save.isPending ? 'Saving draft…' : 'Save draft'}</Button><Button type="submit">Review QC decision</Button></div>
       </fieldset>
     </form>}

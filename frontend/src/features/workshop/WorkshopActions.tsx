@@ -44,7 +44,7 @@ function QuoteEditor({ job, invitationId, quote, onCancel, onSaved }: {
     catch { /* Keep the draft and show the actual service error in the confirmation. */ }
     finally { locked.current = false; }
   }
-  return <section className="mt-5 space-y-4 rounded-lg border bg-card p-5" aria-label="Mock quotation editor">
+  return <section className="role-quote-editor mt-5 space-y-4 border bg-card p-5" aria-label="Mock quotation editor">
     <h3 className="font-semibold">{quote ? 'Edit mock quotation' : 'Submit mock quotation'}</h3>
     <p className="text-sm text-muted-foreground">{job.title}. Amounts are INR totals. Production duration and cost breakdown are unavailable in the shared contract.</p>
     <form aria-label="Mock quotation form" noValidate onSubmit={event => { void form.handleSubmit(prepare)(event); }}>
@@ -107,7 +107,7 @@ export function WorkshopQuoteActions({ row }: { row: WorkshopQuotationData }) {
     finally { locked.current = false; }
   }
   const blocked = Boolean(services.demo?.warning);
-  return <div aria-label={'Commands for ' + row.quote.id} className="min-w-56 space-y-3">
+  return <div role="group" aria-label={'Commands for ' + row.quote.id} className="min-w-56 space-y-3">
     <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={blocked || !row.actions.edit || editing} onClick={() => { setFeedback(''); setEditing(true); }}>Edit quote</Button><Button variant="outline" disabled={blocked || !row.actions.withdraw || mutation.isPending} onClick={() => { mutation.reset(); setExpected(terms(row.quote)); }}>Withdraw quote</Button></div>
     {row.actions.reason && <p className="text-xs text-muted-foreground">{row.actions.reason}</p>}
     {feedback && <p role="status" className="text-sm">{feedback}</p>}
