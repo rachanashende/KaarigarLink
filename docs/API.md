@@ -45,6 +45,7 @@ IDs are strings (cuid). Dates are ISO 8601 strings. Coordinates are decimal degr
 | JobStatus | `DRAFT` `OPEN` `MATCHED` `AWARDED` `IN_PROGRESS` `COMPLETED` `CANCELLED` |
 | RequirementType | `MACHINE_TYPE` `TOLERANCE_MM` `PART_SIZE_MM` `CERTIFICATION` `OTHER` |
 | InvitationStatus | `INVITED` `ACCEPTED` `DECLINED` `EXPIRED` |
+| QuoteStatus | `SUBMITTED` `ACCEPTED` `REJECTED` `WITHDRAWN` |
 
 ---
 
@@ -626,3 +627,84 @@ WORKSHOP only, and only the invited workshop (anyone else → `404 "Invitation n
 The status check and the write happen in **one conditional update**, so simultaneous accept and decline, or a response racing expiry or cancellation, can never both succeed.
 
 **Allowed status changes:** `INVITED → ACCEPTED | DECLINED` (by the workshop). `INVITED → EXPIRED` (time, job leaving `OPEN`/`MATCHED`, or cancellation). `ACCEPTED → EXPIRED` (job cancellation only). Nothing else; `DECLINED` and `EXPIRED` are final, and re-invitation is not allowed.
+
+---
+
+## Quotations ✅
+
+A workshop quotes on a job through **its own invitation**, and **only after accepting it**. Quote submission and editing are live. Awarding a quote and creating an order are not part of this API yet.
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `POST /api/quotes/invitations/:invitationId` | invited WORKSHOP | Submit the quote for an accepted invitation |
+| ✅ `PATCH /api/quotes/:quoteId` | owning WORKSHOP | Edit a submitted quote |
+| ✅ `GET /api/quotes/jobs/:jobId` | owning BUYER | All quotes for my job |
+| ✅ `GET /api/quotes/mine` | WORKSHOP | Quotes from my workshop |
+
+### Eligibility
+A quote can be submitted or edited only while **all** of these hold:
+
+| Rule | Otherwise |
+|---|---|
+| The invitation belongs to the caller's workshop (edit: the quote does) | `404 "Invitation not found"` / `404 "Quote not found"` |
+| The invitation is `ACCEPTED` | `409 "Accept the invitation before submitting a quote"` (`INVITED`), `409 "The invitation was declined; quotes are not allowed"` (`DECLINED`), `409 "The invitation has expired; quotes are not allowed"` (`EXPIRED`, including overdue) |
+| The job is `OPEN` or `MATCHED` | `409 "This job is no longer accepting quotes (status AWARDED)"` (actual status shown) |
+| The job deadline has not passed | `409 "The job deadline has passed; quotes are no longer accepted"` |
+| Edit only: the quote is `SUBMITTED` | `409 "Only SUBMITTED quotes can be edited (this quote is ACCEPTED)"` |
+
+- **One quote per invitation**, so one per workshop and job. A second submission → `409 "A quote already exists for this invitation; update it instead"`. The database enforces this too, so parallel submissions still produce exactly one quote.
+- **Expiry:** before checking, overdue `INVITED` invitations are saved as `EXPIRED` with the same lazy-expiry helper the invitation endpoints use. Cancelling a job expires its `INVITED` and `ACCEPTED` invitations (see [Invitations](#invitations-)), so its quotes can no longer be edited.
+- **Concurrency:** the checks and the write happen in one transaction that holds a shared lock on the job and the invitation, plus a row lock on the quote for edits. A cancellation or other job change that happens at the same moment either waits for the quote write, or makes the quote request wait and then get the `409` for the new state. A quote is never written against a job or invitation state that has already changed.
+- Changing a quote does not change the job or invitation.
+
+### Money and fields
+- `totalPrice` is sent as a JSON number (`12500.5`) or a decimal string (`"12500.50"`). It must be > 0, with at most 2 decimal places and at most 10 digits before the point (max `9999999999.99`). Exponent notation is rejected. It is stored exactly and **always returned as a 2-decimal string**, e.g. `"12500.50"`.
+- `currency` is always `"INR"` (not settable).
+- `estimatedDays`: whole number of days, 1-3650.
+- `notes`: optional, up to 2000 characters, trimmed.
+- `validUntil`: optional ISO date or datetime and must be in the future. A date-only value means the end of that day (UTC).
+
+### `POST /api/quotes/invitations/:invitationId`
+WORKSHOP only. Body (any other field → `400`):
+```json
+{ "totalPrice": "12500.50", "estimatedDays": 14, "notes": "Includes anodising", "validUntil": "2026-12-15" }
+```
+`201 "Quote submitted successfully"`:
+```json
+{ "success": true, "message": "Quote submitted successfully",
+  "data": { "quote": {
+    "id": "cm…", "invitationId": "cm…", "jobId": "seed-job-alu-brackets", "workshopId": "seed-ws-precision-works",
+    "totalPrice": "12500.50", "currency": "INR", "estimatedDays": 14, "notes": "Includes anodising",
+    "validUntil": "2026-12-15T23:59:59.999Z", "status": "SUBMITTED",
+    "createdAt": "2026-11-22T10:00:00.000Z", "updatedAt": "2026-11-22T10:00:00.000Z" } } }
+```
+
+| Error | When |
+|---|---|
+| `400 "Validation failed"` | invalid `totalPrice` / `estimatedDays` / `validUntil` (including a past `validUntil`), note too long, unknown fields |
+| `401` / `403` | no token / not a WORKSHOP |
+| `404 "Invitation not found"` | unknown id or another workshop's invitation |
+| `404 "No workshop profile found for this user"` | WORKSHOP user without a profile |
+| `409` | invitation not `ACCEPTED`, job closed or past its deadline, or a quote already exists (see [Eligibility](#eligibility)) |
+
+### `PATCH /api/quotes/:quoteId`
+Owning WORKSHOP only. Send at least one of `totalPrice`, `estimatedDays`, `notes`, `validUntil` (same rules as above; `notes` and `validUntil` accept `null` to clear). `200 "Quote updated successfully"` returns `{ quote }` in the same shape, with a later `updatedAt`. The status stays `SUBMITTED`.
+
+| Error | When |
+|---|---|
+| `400 "Validation failed"` | empty body, invalid field, past `validUntil`, unknown fields |
+| `401` / `403` | no token / not a WORKSHOP |
+| `404 "Quote not found"` | unknown id or another workshop's quote |
+| `409` | quote not `SUBMITTED`, invitation no longer `ACCEPTED`, job no longer `OPEN`/`MATCHED` (e.g. awarded or cancelled) or past its deadline |
+
+### `GET /api/quotes/jobs/:jobId`
+Owning BUYER only (another buyer's job → `404 "Job not found"`; other roles → `403`). Newest first.
+```json
+{ "data": { "quotes": [ {
+  "id": "…", "invitationId": "…", "jobId": "…", "workshopId": "…", "totalPrice": "12500.50", "currency": "INR",
+  "estimatedDays": 14, "notes": null, "validUntil": null, "status": "SUBMITTED", "createdAt": "…", "updatedAt": "…",
+  "workshop": { "id": "…", "businessName": "Precision Works", "rating": 4.8, "city": "Pune" } } ] } }
+```
+
+### `GET /api/quotes/mine`
+WORKSHOP only; quotes from the caller's own workshop, newest first. Each quote includes `job: { id, title, status, deadline }`.

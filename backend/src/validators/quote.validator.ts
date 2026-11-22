@@ -1,21 +1,48 @@
-
 import { z } from 'zod';
+import { dateInput } from './common';
 
-export const createQuoteBodySchema = z.object({
-  totalPrice: z.coerce.number().positive(),
-  estimatedDays: z.number().int().positive(),
-  notes: z.string().trim().max(2000).optional(),
-  validUntil: z.coerce.date().optional(),
-});
+/**
+ * Money is kept exact end to end: accepted as a JSON number or a decimal
+ * string, validated on its decimal text and passed to Prisma as a string for
+ * the Decimal(12, 2) column (never through floating-point arithmetic).
+ */
+const MONEY = /^\d{1,10}(\.\d{1,2})?$/;
+const moneySchema = z
+  .union([z.number(), z.string().trim()], {
+    errorMap: () => ({ message: 'totalPrice must be a number or a decimal string' }),
+  })
+  .transform((v) => (typeof v === 'number' ? String(v) : v))
+  .refine((s) => MONEY.test(s), 'totalPrice must have at most 2 decimal places and at most 10 digits before the point')
+  .refine((s) => Number(s) > 0, 'totalPrice must be greater than 0');
 
-export const updateQuoteBodySchema = z.object({
-  totalPrice: z.coerce.number().positive().optional(),
-  estimatedDays: z.number().int().positive().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
-  validUntil: z.coerce.date().nullable().optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: 'At least one field must be provided',
-});
+const estimatedDaysSchema = z.number().int().positive().max(3650, 'estimatedDays must be at most 3650');
+
+/** Optional quote expiry: an ISO date/datetime that must still be in the future. */
+const validUntilSchema = dateInput({ endOfDay: true }).refine(
+  (d) => d.getTime() > Date.now(),
+  'validUntil must be in the future',
+);
+
+export const createQuoteBodySchema = z
+  .object({
+    totalPrice: moneySchema,
+    estimatedDays: estimatedDaysSchema,
+    notes: z.string().trim().max(2000).optional(),
+    validUntil: validUntilSchema.optional(),
+  })
+  .strict();
+
+export const updateQuoteBodySchema = z
+  .object({
+    totalPrice: moneySchema.optional(),
+    estimatedDays: estimatedDaysSchema.optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
+    validUntil: validUntilSchema.nullable().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided',
+  });
 
 export const quoteIdParamsSchema = z.object({
   quoteId: z.string().min(1),
@@ -28,3 +55,6 @@ export const invitationIdParamsSchema = z.object({
 export const jobIdParamsSchema = z.object({
   jobId: z.string().min(1),
 });
+
+export type CreateQuoteInput = z.infer<typeof createQuoteBodySchema>;
+export type UpdateQuoteInput = z.infer<typeof updateQuoteBodySchema>;
