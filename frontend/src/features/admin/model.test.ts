@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as calendar from '@/services/jobs';
 import { createMockService } from '@/services/adapters/mock';
+import type { AdminOverview } from '@/services/admin';
 import { metrics, operationalAlerts, usersRows, workshopRows, jobsRows, ordersRows, qualityRows, compareDates, dateLabel, progress } from './model';
 import { milestoneProgress } from '@/features/buyer/orderModel';
 import { inspectionStats } from '@/features/inspector/model';
@@ -18,8 +19,7 @@ it('derives platform metrics and matches inspector/buyer progress semantics', as
   expect(progress([])).toBeNull();
 });
 it('handles truly empty read models', async () => {
-  const value = await data();
-  for (const key of Object.keys(value) as (keyof typeof value)[]) value[key] = [];
+  const value: AdminOverview = { users: [], workshops: [], jobs: [], orders: [], inspections: [], matches: [], invitations: [], quotes: [], activity: [], assignments: {} };
   expect(metrics(value)).toEqual({ users: 0, buyers: 0, workshops: 0, jobs: 0, orders: 0, pending: 0, rework: 0 });
   expect(operationalAlerts(value)).toEqual([]);
 });

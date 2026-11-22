@@ -23,5 +23,7 @@ export default defineConfig({
     },
   },
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  test: { environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], include: ['src/**/*.test.{ts,tsx}'], restoreMocks: true },
+  // Unit tests always start in mock mode, whatever a developer's local .env selects; tests that
+  // need live mode opt in explicitly (createServices('live'), vi.stubEnv).
+  test: { environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], include: ['src/**/*.test.{ts,tsx}'], restoreMocks: true, env: { VITE_SERVICE_MODE: 'mock' } },
 });

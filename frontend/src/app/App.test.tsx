@@ -38,7 +38,7 @@ it('logs in with mock email/password and reports invalid credentials', async () 
 });
 it.each(roleOrder)('demo login redirects %s to its own workspace', async role => {
   const user = setup();
-  await user.click(await screen.findByRole('button', { name: role === 'buyer' ? 'Buyer' : role === 'workshop' ? 'Workshop' : role === 'admin' ? 'Admin' : 'Inspector' }));
+  await user.click(await screen.findByRole('button', { name: 'Demo ' + (role === 'buyer' ? 'Buyer' : role === 'workshop' ? 'Workshop' : role === 'admin' ? 'Admin' : 'Inspector') }));
   expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(role[0]!.toUpperCase() + role.slice(1) + ' workspace');
 });
 it.each(roleOrder)('restores %s and redirects away from login', async role => {

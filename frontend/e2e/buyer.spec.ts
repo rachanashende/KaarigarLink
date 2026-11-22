@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function buyerLogin(page: Page) {
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Buyer', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Buyer', exact: true }).click();
   await expect(page).toHaveURL('/buyer/dashboard');
   await expect(page.getByRole('group', { name: 'Total posted jobs' })).toContainText('10');
 }
@@ -91,7 +91,7 @@ test('unknown job and other-role access are handled without operational actions'
   for (const role of ['Workshop', 'Inspector', 'Admin']) {
     await page.getByRole('button', { name: 'Log out', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Log out', exact: true }).click();
-    await page.getByRole('button', { name: role, exact: true }).click();
+    await page.getByRole('button', { name: 'Demo ' + role, exact: true }).click();
     await page.goto('/buyer/jobs/new');
     await expect(page.getByRole('heading', { name: 'Access restricted' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Post job', exact: true })).not.toBeVisible();

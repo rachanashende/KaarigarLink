@@ -2,7 +2,7 @@ import { fixtures } from './mock/fixtures';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { apiRequest } from './apiClient';
-import { createServices } from './index';
+import { createServices, serviceMode } from './index';
 import { createMockService } from './adapters/mock';
 import { createMockStore } from './mock/store';
 
@@ -28,9 +28,12 @@ describe('mock foundation', () => {
     expect(await createMockService(store).list('jobs')).toEqual([]);
     expect(await createServices().list('jobs')).toHaveLength(fixtures.jobs.length);
   });
-  it('fails explicitly for real or invalid modes', () => {
-    expect(() => createServices('real')).toThrow('not configured');
-    expect(() => createServices('typo')).toThrow('not configured');
+  it('fails explicitly for invalid modes instead of falling back to mock data', () => {
+    // M10: 'live' is now a supported mode; anything other than mock/live still fails loudly.
+    expect(() => createServices('real')).toThrow('VITE_SERVICE_MODE must be "mock" or "live"');
+    expect(() => createServices('typo')).toThrow('VITE_SERVICE_MODE must be "mock" or "live"');
+    expect(() => createServices('')).toThrow('VITE_SERVICE_MODE');
+    expect(serviceMode()).toBe('mock'); // mock remains the default
   });
 });
 

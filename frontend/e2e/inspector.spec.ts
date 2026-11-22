@@ -4,7 +4,7 @@ test.beforeEach(async ({ page }) => { await page.clock.setFixedTime(new Date('20
 
 async function login(page: Page, role = 'Inspector') {
   await page.goto('/login');
-  await page.getByRole('button', { name: role, exact: true }).click();
+  await page.getByRole('button', { name: 'Demo ' + role, exact: true }).click();
   await expect(page).toHaveURL('/' + role.toLowerCase() + '/dashboard');
 }
 async function logout(page: Page) {

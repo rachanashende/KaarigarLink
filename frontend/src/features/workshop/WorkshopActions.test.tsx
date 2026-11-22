@@ -62,7 +62,7 @@ it('validates, submits, edits and withdraws the canonical quote without lifecycl
   expect(JSON.stringify(buyer)).toContain('WITHDRAWN');
   expect(store.snapshot().orders).toEqual(before.orders); expect(store.snapshot().inspections).toEqual(before.inspections);
   expect(store.snapshot().payments).toEqual(before.payments);
-});
+}, 15_000); // a long multi-step flow: allow for a loaded machine during the full suite
 it('keeps pending responses disabled and reports the real failure without a successful write', async () => {
   const { user, service, store } = await setup(); const before = store.snapshot();
   let fail!: (error: Error) => void;

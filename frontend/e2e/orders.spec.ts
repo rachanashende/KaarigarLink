@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function login(page: Page) {
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Buyer', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Buyer', exact: true }).click();
   await expect(page).toHaveURL('/buyer/dashboard');
 }
 test('orders search/filter, keyboard navigation and read-only rework tracking', async ({ page }) => {
@@ -92,7 +92,7 @@ test('unknown orders, role restrictions and invalid persistence remain explicit'
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Log out', exact: true }).click();
-  await page.getByRole('button', { name: 'Workshop', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Workshop', exact: true }).click();
   for (const route of ['/buyer/orders', '/buyer/orders/order-production', '/buyer/orders/order-closed/review']) {
     await page.goto(route);
     await expect(page.getByRole('heading', { name: 'Access restricted' })).toBeVisible();

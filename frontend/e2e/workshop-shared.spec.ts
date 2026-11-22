@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => { await page.clock.setFixedTime(new Date('2026-11-19T08:00:00.000Z')); });
 async function login(page: Page, role = 'Workshop') {
-  await page.goto('/login'); await page.getByRole('button', { name: role, exact: true }).click();
+  await page.goto('/login'); await page.getByRole('button', { name: 'Demo ' + role, exact: true }).click();
   await expect(page).toHaveURL('/' + role.toLowerCase() + '/dashboard');
 }
 async function logout(page: Page) {
@@ -103,7 +103,7 @@ test('submitted QC is shared with workshop while drafts, attachments, lifecycle 
 test('shared malformed storage warns, retains canonical reads and recovers through existing reset', async ({ page }) => {
   await page.goto('/login');
   await page.evaluate(() => localStorage.setItem('kaarigarlink.demo-data.v1', '{malformed'));
-  await page.reload(); await page.getByRole('button', { name: 'Workshop', exact: true }).click();
+  await page.reload(); await page.getByRole('button', { name: 'Demo Workshop', exact: true }).click();
   await expect(page.getByRole('group', { name: 'Active orders', exact: true })).toContainText('4');
   await expect(page.getByRole('alert')).toContainText('Saved demo data could not be restored');
   expect(await page.evaluate(() => localStorage.getItem('kaarigarlink.demo-data.v1'))).toBe('{malformed');

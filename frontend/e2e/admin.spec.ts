@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => { await page.clock.setFixedTime(new Date('2026-11-19T08:00:00.000Z')); });
 async function login(page: Page, role = 'Admin') {
-  await page.goto('/login'); await page.getByRole('button', { name: role, exact: true }).click();
+  await page.goto('/login'); await page.getByRole('button', { name: 'Demo ' + role, exact: true }).click();
   await expect(page).toHaveURL('/' + role.toLowerCase() + '/dashboard');
 }
 async function logout(page: Page) {

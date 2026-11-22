@@ -21,7 +21,7 @@ test('login validation, password visibility and email login', async ({ page }) =
 for (const [role, name] of Object.entries(roleNames)) {
   test(`${name} demo routing, restoration, guards and logout`, async ({ page }) => {
     await page.goto('/login');
-    await page.getByRole('button', { name, exact: true }).click();
+    await page.getByRole('button', { name: 'Demo ' + name, exact: true }).click();
     await expect(page).toHaveURL('/' + role + '/dashboard');
     await expect(page.getByRole('heading', { name: name + ' workspace', exact: true })).toBeVisible();
     await page.reload();
@@ -49,7 +49,7 @@ test('desktop collapse and responsive shell screenshots', async ({ page }, testI
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Buyer', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Buyer', exact: true }).click();
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
@@ -66,14 +66,14 @@ test('desktop collapse and responsive shell screenshots', async ({ page }, testI
 test('mobile navigation traps focus, closes on Escape and restores focus', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Buyer', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Buyer', exact: true }).click();
   const trigger = page.getByRole('button', { name: 'Open navigation' });
   await trigger.click();
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
   const dialog = page.getByRole('dialog', { name: 'Workspace navigation' });
   await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(dialog.getByRole('link', { name: 'Shared foundation' })).toBeFocused();
+  await expect(dialog.getByRole('link', { name: 'Platform guide' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(dialog.getByRole('button', { name: 'Close navigation' })).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('phase-1-mobile-navigation.png'), fullPage: false });
@@ -117,7 +117,7 @@ test('captures remaining role placeholders without operational actions', async (
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const [role, name] of Object.entries(roleNames).filter(([role]) => role !== 'buyer')) {
     await page.goto('/login');
-    await page.getByRole('button', { name, exact: true }).click();
+    await page.getByRole('button', { name: 'Demo ' + name, exact: true }).click();
     await expect(page).toHaveURL('/' + role + '/dashboard');
     await page.screenshot({ path: testInfo.outputPath(`phase-1-${role}-1440.png`), fullPage: true });
     await page.getByRole('button', { name: 'Log out', exact: true }).click();

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function login(page: Page) {
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Buyer', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Buyer', exact: true }).click();
   await expect(page).toHaveURL('/buyer/dashboard');
 }
 
@@ -85,7 +85,7 @@ test('empty matches, zero/one quotations and unavailable jobs stay truthful', as
 
 test('other roles cannot access matching or quote actions', async ({ page }) => {
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Workshop', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Workshop', exact: true }).click();
   for (const route of ['/buyer/jobs/job-1/matches', '/buyer/jobs/job-1/quotes']) {
     await page.goto(route);
     await expect(page.getByRole('heading', { name: 'Access restricted' })).toBeVisible();

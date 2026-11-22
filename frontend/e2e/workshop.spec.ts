@@ -23,7 +23,7 @@ test('shared workshop login, canonical routing, disabled actions and isolated le
   }, legacyKeys);
   await page.goto('/workshop/onboarding');
   await expect(page).toHaveURL('/login');
-  await page.getByRole('button', { name: 'Workshop', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Workshop', exact: true }).click();
   await expect(page).toHaveURL('/workshop/dashboard');
   const primary = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--primary'));
   for (const [path, title] of pages) {
@@ -52,7 +52,7 @@ test('shared workshop login, canonical routing, disabled actions and isolated le
 for (const role of ['Buyer', 'Inspector', 'Admin']) {
   test(role + ' cannot access any workshop workspace or details', async ({ page }) => {
     await page.goto('/login');
-    await page.getByRole('button', { name: role, exact: true }).click();
+    await page.getByRole('button', { name: 'Demo ' + role, exact: true }).click();
     for (const [path] of pages) {
       await page.goto('/workshop/' + path);
       await expect(page.getByRole('heading', { name: 'Access restricted' })).toBeVisible();
@@ -64,7 +64,7 @@ for (const role of ['Buyer', 'Inspector', 'Admin']) {
 test('workshop navigation supports keyboard, mobile, collapse and shared styling', async ({ page }, testInfo) => {
   test.slow();
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Workshop', exact: true }).click();
+  await page.getByRole('button', { name: 'Demo Workshop', exact: true }).click();
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     for (const [path, title] of pages) {
