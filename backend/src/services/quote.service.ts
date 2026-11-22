@@ -17,6 +17,7 @@
  * read returns the committed row, so a quote is never written against a job or
  * invitation state that has already changed.
  */
+import { links, recordEvent } from './events';
 import { Prisma, type InvitationStatus, type JobStatus, type Quote, type QuoteStatus } from '@prisma/client';
 import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
@@ -124,7 +125,7 @@ export async function createQuote(user: AuthUser, invitationId: string, input: C
       if (existing) throw duplicateQuote();
 
       // The unique invitationId index is the final guard against a parallel submission.
-      return tx.quote.create({
+      const created = await tx.quote.create({
         data: {
           invitationId,
           jobId: invitation.jobId,
@@ -135,6 +136,8 @@ export async function createQuote(user: AuthUser, invitationId: string, input: C
           validUntil: input.validUntil,
         },
       });
+      await quoteEvent(tx, user, created, 'QUOTE_SUBMITTED', 'New quotation received');
+      return created;
     });
     return quoteView(quote);
   } catch (err) {
@@ -146,6 +149,7 @@ export async function createQuote(user: AuthUser, invitationId: string, input: C
 // ---------- Workshop: edit ----------
 
 export async function updateQuote(user: AuthUser, quoteId: string, input: UpdateQuoteInput) {
+  const { expectedUpdatedAt, ...changes } = input;
   const workshopId = await getMyWorkshopId(user);
   const found = await prisma.quote.findUnique({
     where: { id: quoteId },
@@ -166,17 +170,78 @@ export async function updateQuote(user: AuthUser, quoteId: string, input: Update
     if (current.status !== 'SUBMITTED') {
       throw ApiError.conflict(`Only SUBMITTED quotes can be edited (this quote is ${current.status})`);
     }
+    assertVersion(current.updatedAt, expectedUpdatedAt);
 
-    return tx.quote.update({
+    const updated = await tx.quote.update({
       where: { id: quoteId },
       data: {
-        ...input,
+        ...changes,
         // Strictly later than the version read, so updatedAt always advances (same rule as jobs).
         updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)),
       },
     });
+    await quoteEvent(tx, user, updated, 'QUOTE_UPDATED', 'Quotation updated');
+    return updated;
   });
   return quoteView(quote);
+}
+
+/**
+ * M11 optimistic concurrency. Quote.updatedAt advances strictly on every write
+ * (see updateQuote), so it is a reliable version. Checked under the quote row lock.
+ */
+function assertVersion(actual: Date, expected: string | undefined) {
+  if (expected !== undefined && actual.getTime() !== new Date(expected).getTime()) {
+    throw ApiError.conflict('This quote was changed since you loaded it. Reload the latest version and try again.');
+  }
+}
+
+/** M12: audit + notify the job's buyer about a quote change. */
+async function quoteEvent(tx: Tx, user: AuthUser, quote: { id: string; jobId: string; totalPrice: Prisma.Decimal; status: string }, action: string, title: string) {
+  const job = await tx.job.findUniqueOrThrow({ where: { id: quote.jobId }, select: { buyerId: true, title: true } });
+  await recordEvent(tx, {
+    actor: user, action, entityType: 'Quote', entityId: quote.id, jobId: quote.jobId,
+    metadata: { status: quote.status, totalPrice: quote.totalPrice.toFixed(2) },
+    notify: [{ userId: job.buyerId, title, body: title + ' for ' + job.title, link: links.buyerJobQuotes(quote.jobId) }],
+  });
+}
+
+// ---------- Workshop: withdraw (M10) ----------
+
+/**
+ * The workshop withdraws its own SUBMITTED quote: SUBMITTED -> WITHDRAWN. A
+ * repeat returns { changed: false }. Same lock order as edits and award
+ * (job FOR SHARE -> quote FOR UPDATE), so a withdrawal and an award of the same
+ * quote never interleave: award holds the job FOR UPDATE. No invitation lock is
+ * needed (a withdrawal never depends on the invitation state). Withdrawn quotes
+ * stay in history and cannot be resubmitted (one quote per invitation).
+ */
+export async function withdrawQuote(user: AuthUser, quoteId: string, expectedUpdatedAt?: string) {
+  const workshopId = await getMyWorkshopId(user);
+  const found = await prisma.quote.findUnique({ where: { id: quoteId }, select: { id: true, jobId: true, workshopId: true } });
+  if (!found || found.workshopId !== workshopId) throw quoteNotFound();
+
+  return prisma.$transaction(async (tx) => {
+    const jobs = await tx.$queryRaw<{ status: string }[]>`SELECT "status" FROM "Job" WHERE "id" = ${found.jobId} FOR SHARE`;
+    if (!jobs[0]) throw quoteNotFound();
+    const rows = await tx.$queryRaw<{ status: QuoteStatus; updatedAt: Date }[]>`
+      SELECT "status", "updatedAt" FROM "Quote" WHERE "id" = ${quoteId} FOR UPDATE`;
+    const current = rows[0];
+    if (!current) throw quoteNotFound();
+    if (current.status === 'WITHDRAWN') {
+      return { changed: false, quote: quoteView(await tx.quote.findUniqueOrThrow({ where: { id: quoteId } })) };
+    }
+    if (current.status !== 'SUBMITTED') {
+      throw ApiError.conflict(`Only SUBMITTED quotes can be withdrawn (this quote is ${current.status})`);
+    }
+    assertVersion(current.updatedAt, expectedUpdatedAt);
+    const quote = await tx.quote.update({
+      where: { id: quoteId },
+      data: { status: 'WITHDRAWN', updatedAt: new Date(Math.max(Date.now(), current.updatedAt.getTime() + 1)) },
+    });
+    await quoteEvent(tx, user, quote, 'QUOTE_WITHDRAWN', 'Quotation withdrawn');
+    return { changed: true, quote: quoteView(quote) };
+  });
 }
 
 // ---------- Buyer: quotes for my job ----------

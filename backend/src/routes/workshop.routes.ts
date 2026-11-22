@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as c from '../controllers/workshop.controller';
 import * as invitations from '../controllers/invitation.controller';
 import * as ratings from '../controllers/rating.controller';
+import { ratingHistoryQuery } from '../validators/rating.validator';
 import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
@@ -34,7 +35,7 @@ router.get('/invitations', authorize('WORKSHOP'), validate({ query: workshopInvi
 router.get('/', validate({ query: listWorkshopsQuery }), c.listWorkshops);
 router.post('/', authorize('WORKSHOP'), validate({ body: createWorkshopSchema }), c.createWorkshop);
 router.get('/:id', validate({ params: workshopIdParams }), c.getWorkshop);
-router.get('/:id/ratings', validate({ params: workshopIdParams }), ratings.forWorkshop);
+router.get('/:id/ratings', validate({ params: workshopIdParams, query: ratingHistoryQuery }), ratings.forWorkshop);
 router.put('/:id', manage, validate({ params: workshopIdParams, body: updateWorkshopSchema }), c.updateWorkshop);
 
 // Machines

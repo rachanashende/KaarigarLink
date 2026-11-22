@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { env } from './config/env';
 import apiRoutes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { rejectNulBytes } from './middleware/rejectNulBytes';
 
 /** Builds the Express app (no listen) so Supertest can import it directly. */
 export function createApp() {
@@ -24,6 +25,7 @@ export function createApp() {
     }),
   );
   app.use(express.json({ limit: '1mb' }));
+  app.use(rejectNulBytes);
 
   app.get('/', (_req, res) => {
     res.json({ success: true, message: 'KaarigarLink API. See /api/health', data: null });

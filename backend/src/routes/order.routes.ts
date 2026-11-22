@@ -9,13 +9,14 @@ import {
   emptyBodySchema,
   quoteIdParamsSchema,
   orderIdParamsSchema,
+  mineQuerySchema,
 } from '../validators/order.validator';
 import * as milestones from '../controllers/milestone.controller';
 import * as inspections from '../controllers/inspection.controller';
 import * as payments from '../controllers/payment.controller';
 import * as ratings from '../controllers/rating.controller';
 import { createMilestoneBodySchema } from '../validators/milestone.validator';
-import { createInspectionBodySchema } from '../validators/inspection.validator';
+import { assignInspectorBodySchema, createInspectionBodySchema, saveDraftBodySchema } from '../validators/inspection.validator';
 import { createPaymentBodySchema } from '../validators/payment.validator';
 import { submitRatingBodySchema } from '../validators/rating.validator';
 
@@ -34,6 +35,7 @@ router.post(
 router.get(
   '/mine',
   authorize('BUYER', 'WORKSHOP'),
+  validate({ query: mineQuerySchema }),
   orderController.mine,
 );
 
@@ -68,6 +70,16 @@ router.get('/:orderId/milestones', authorize('BUYER', 'WORKSHOP'), validate(orde
 router.post('/:orderId/inspections', authorize('INSPECTOR'), validate({ ...orderParams, body: createInspectionBodySchema }), inspections.create);
 router.get('/:orderId/inspections', authorize('BUYER', 'WORKSHOP', 'INSPECTOR', 'ADMIN'), validate(orderParams), inspections.list);
 
+// M11 private inspection drafts (the currently assigned INSPECTOR only; checked in the service).
+router.get('/:orderId/inspection-draft', authorize('INSPECTOR'), validate(orderParams), inspections.getDraft);
+router.put('/:orderId/inspection-draft', authorize('INSPECTOR'), validate({ ...orderParams, body: saveDraftBodySchema }), inspections.saveDraft);
+router.delete('/:orderId/inspection-draft', authorize('INSPECTOR'), validate({ ...orderParams, body: emptyBodySchema }), inspections.deleteDraft);
+
+// B1 inspector assignment (ADMIN).
+router.put('/:orderId/inspector', authorize('ADMIN'), validate({ ...orderParams, body: assignInspectorBodySchema }), inspections.assign);
+router.delete('/:orderId/inspector', authorize('ADMIN'), validate({ ...orderParams, body: emptyBodySchema }), inspections.unassign);
+router.get('/:orderId/inspector-assignments', authorize('ADMIN'), validate(orderParams), inspections.assignments);
+
 router.post('/:orderId/payments', authorize('BUYER'), validate({ ...orderParams, body: createPaymentBodySchema }), payments.create);
 router.get('/:orderId/payments', authorize('BUYER', 'WORKSHOP'), validate(orderParams), payments.list);
 
@@ -75,7 +87,7 @@ router.post('/:orderId/rating', authorize('BUYER'), validate({ ...orderParams, b
 
 router.get(
   '/:orderId',
-  authorize('BUYER', 'WORKSHOP'),
+  authorize('BUYER', 'WORKSHOP', 'INSPECTOR'), // INSPECTOR: currently assigned only, no payments
   validate({ params: orderIdParamsSchema }),
   orderController.getById,
 );

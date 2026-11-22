@@ -47,5 +47,30 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+/** Development-only demo login: a role from a fixed allowlist, nothing else. */
+export const demoLoginSchema = z.object({ role: z.enum(['BUYER', 'WORKSHOP', 'INSPECTOR', 'ADMIN']) }).strict();
+
 export type RegisterInput = z.infer<typeof registerSchema>;
+export type DemoLoginInput = z.infer<typeof demoLoginSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+
+/** M11: PATCH /api/auth/me. Strict: email, role and password cannot change here. */
+export const updateProfileSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100).optional(),
+    phone: z.string().trim().max(20).nullable().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, 'Provide at least one field to update');
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/** M12: PATCH /api/auth/me/password. */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required').max(72),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters').max(72),
+  })
+  .strict();
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

@@ -12,3 +12,13 @@ export const submitRatingBodySchema = z
   .strict();
 
 export type SubmitRatingInput = z.infer<typeof submitRatingBodySchema>;
+
+/** B5: GET /workshops/:id/ratings pagination (defaults keep small histories on one page). */
+export const ratingHistoryQuery = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .strict();
+
+export type RatingHistoryQuery = z.infer<typeof ratingHistoryQuery>;

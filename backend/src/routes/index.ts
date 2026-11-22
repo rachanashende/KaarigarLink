@@ -8,6 +8,9 @@ import quoteRoutes from './quote.routes';
 import orderRoutes from './order.routes';
 import milestoneRoutes from './milestone.routes';
 import paymentRoutes from './payment.routes';
+import inspectionRoutes from './inspection.routes';
+import adminRoutes from './admin.routes';
+import activityRoutes from './activity.routes';
 
 /**
  * Central router mounted at /api.
@@ -24,5 +27,9 @@ router.use('/quotes', quoteRoutes);
 router.use('/orders', orderRoutes);
 router.use('/milestones', milestoneRoutes);
 router.use('/payments', paymentRoutes);
+router.use('/inspections', inspectionRoutes);
+router.use('/admin', adminRoutes);
+// M12: documents, audit history and notifications (full paths inside; mounted last).
+router.use(activityRoutes);
 
 export default router;

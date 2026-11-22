@@ -22,7 +22,8 @@ export async function getById(req: Request, res: Response) {
 }
 
 export async function mine(req: Request, res: Response) {
-  const orders = await orderService.listMyOrders(req.user!);
+  const view = (req.query as { view?: 'summary' | 'full' }).view ?? 'summary';
+  const orders = await orderService.listMyOrders(req.user!, view);
   sendSuccess(res, { orders }, 'Your orders fetched');
 }
 

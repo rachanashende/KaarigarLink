@@ -22,3 +22,9 @@ export async function list(req: Request, res: Response) {
   const result = await paymentService.listOrderPayments(req.user!, param(req, 'orderId'));
   sendSuccess(res, result, 'Payments fetched');
 }
+
+/** B3: explicit simulated refund (ADMIN or the awarded WORKSHOP); no money moves. */
+export async function refund(req: Request, res: Response) {
+  const result = await paymentService.refundPayment(req.user!, param(req, 'paymentId'));
+  sendSuccess(res, result, result.changed ? 'Payment marked REFUNDED (simulated)' : 'Payment already REFUNDED');
+}

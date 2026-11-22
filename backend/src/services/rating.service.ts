@@ -18,7 +18,8 @@ import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import { findParticipantOrder, isUniqueViolation, lockOrder } from './orderAccess';
-import type { SubmitRatingInput } from '../validators/rating.validator';
+import { orderEvent } from './events';
+import type { RatingHistoryQuery, SubmitRatingInput } from '../validators/rating.validator';
 
 const alreadyRated = () => ApiError.conflict('This order has already been rated');
 
@@ -43,6 +44,9 @@ export async function submitRating(user: AuthUser, orderId: string, input: Submi
             "ratingCount" = "ratingCount" + 1
         WHERE "id" = ${ref.workshopId}`;
       if (updated !== 1) throw ApiError.conflict('Workshop not found for this order');
+      await orderEvent(tx, user, ref, 'RATING_SUBMITTED', { title: 'New rating', body: 'The buyer rated this order ' + input.score + ' / 5.' }, {
+        entityType: 'Rating', entityId: rating.id, metadata: { score: input.score }, to: ['workshop'],
+      });
 
       const workshop = await tx.workshop.findUniqueOrThrow({
         where: { id: ref.workshopId },
@@ -56,25 +60,35 @@ export async function submitRating(user: AuthUser, orderId: string, input: Submi
   }
 }
 
-/** Public (any authenticated user) rating history of a workshop, newest first. */
-export async function getWorkshopRatings(workshopId: string) {
+/** Public (any authenticated user) rating history of a workshop, newest first, paginated (B5). */
+export async function getWorkshopRatings(workshopId: string, query: RatingHistoryQuery = { page: 1, limit: 20 }) {
   const workshop = await prisma.workshop.findUnique({
     where: { id: workshopId },
     select: { id: true, businessName: true, rating: true, ratingCount: true },
   });
   if (!workshop) throw ApiError.notFound('Workshop not found');
 
-  const ratings = await prisma.rating.findMany({
-    where: { workshopId },
-    select: {
-      id: true,
-      orderId: true,
-      score: true,
-      review: true,
-      createdAt: true,
-      buyer: { select: { id: true, name: true } },
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-  });
-  return { workshop, ratings };
+  const where = { workshopId };
+  const [total, ratings] = await prisma.$transaction([
+    prisma.rating.count({ where }),
+    prisma.rating.findMany({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        score: true,
+        review: true,
+        createdAt: true,
+        buyer: { select: { id: true, name: true } },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+    }),
+  ]);
+  return {
+    workshop,
+    ratings,
+    pagination: { page: query.page, limit: query.limit, total, totalPages: Math.ceil(total / query.limit) },
+  };
 }

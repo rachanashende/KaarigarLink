@@ -20,7 +20,7 @@ import type {
   RequirementType,
   VerificationStatus,
 } from '@prisma/client';
-import { normalizeCertification, normalizeMaterial } from '../../utils/normalize';
+import { materialMatch, normalizeCertification, normalizeMaterial } from '../../utils/normalize';
 import { DEFAULT_MATCHING_CONFIG, PROCESS_MACHINE_TYPES, type MatchingConfig, type RankingFactor } from './config';
 import { distanceBetween, hasValidCoordinates } from './distance';
 import { capacityBetween, nextWindowStart, productionFinishDate, type CapacityWindow } from './capacity';
@@ -214,7 +214,11 @@ export function evaluateWorkshop(
   } else {
     pass(`Offers ${job.manufacturingProcess}`);
     const materials = capability.supportedMaterials.map(normalizeMaterial);
-    if (materials.includes(material)) pass(`Supports ${material} for ${job.manufacturingProcess}`);
+    // Exact material, or a grade/form of a supported material ("aluminium 6061" -> aluminium).
+    const exact = materials.find((m) => materialMatch(material, m) === 'exact');
+    const base = exact ?? materials.find((m) => materialMatch(material, m) === 'variant');
+    if (exact) pass(`Supports ${material} for ${job.manufacturingProcess}`);
+    else if (base) pass(`Supports ${base} for ${job.manufacturingProcess} (${material} is a grade or form of ${base})`);
     else fail(`Does not support ${material} for ${job.manufacturingProcess} (supports: ${materials.join(', ') || 'none'})`);
   }
 
@@ -288,8 +292,10 @@ export function evaluateWorkshop(
   const jobHasLocation = hasValidCoordinates(job);
   // Missing coordinates never exclude a workshop; distance is simply not scored.
   if (distanceKm !== null) pass(`${fmtKm(distanceKm)} from the job location`);
-  else if (!jobHasLocation) pass('Job has no location, so distance is not scored');
-  else pass('Workshop has no location on its profile, so distance is not scored');
+  // M13 (BUG-03): a delivery city/state is text only; distance needs map coordinates, which
+  // are never guessed, so say exactly why distance is not scored.
+  else if (!jobHasLocation) pass('Distance not scored: the job has no map coordinates (a delivery city and state are not converted to coordinates)');
+  else pass('Distance not scored: the workshop profile has no map coordinates');
 
   if (options.maxDistanceKm !== undefined && jobHasLocation) {
     if (distanceKm === null) pass(`Distance unknown (no workshop location), so the ${options.maxDistanceKm} km limit was not applied`);

@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import { normalizeCertifications } from '../utils/normalize';
 import { assertCanManageWorkshop } from './workshopAccess';
+import { recordEvent } from './events';
 import type { CreateWorkshopInput, ListWorkshopsQuery, UpdateWorkshopInput } from '../validators/workshop.validator';
 
 /** Full workshop view: profile + machines + capabilities + capacity windows. */
@@ -116,6 +117,14 @@ export async function updateWorkshop(user: AuthUser, id: string, input: UpdateWo
   });
   if (count === 0) throw ApiError.conflict('Workshop was modified, please retry');
 
+  // M12: verification decisions notify the owner; other edits are profile updates (field names only).
+  const verificationChanged = input.verificationStatus !== undefined && input.verificationStatus !== current.verificationStatus;
+  await recordEvent(prisma, {
+    actor: user, action: verificationChanged ? 'WORKSHOP_VERIFICATION_' + input.verificationStatus : 'WORKSHOP_PROFILE_UPDATED',
+    entityType: 'Workshop', entityId: id,
+    metadata: verificationChanged ? { from: current.verificationStatus, to: input.verificationStatus! } : { fields: Object.keys(input), ...(resetVerification && { verificationReset: true }) },
+    notify: verificationChanged ? [{ userId: current.userId, title: 'Verification ' + input.verificationStatus!.toLowerCase(), body: 'An admin set your workshop verification to ' + input.verificationStatus!.toLowerCase() + '.', link: '/workshop/profile' }] : [],
+  });
   return prisma.workshop.findUniqueOrThrow({ where: { id }, include: workshopDetailInclude });
 }
 

@@ -36,6 +36,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   } else if (err?.type === 'entity.parse.failed') {
     status = 400;
     message = 'Malformed JSON in request body';
+  } else if (err?.type === 'entity.too.large') {
+    // Body parser size limits (JSON bodies and raw file uploads).
+    status = 413;
+    message = 'Request body is too large';
   }
 
   if (status >= 500 && !env.isTest) {

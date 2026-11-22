@@ -23,7 +23,9 @@ import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import { participantScope } from './orderAccess';
+import { orderEvent } from './events';
 import { assertQualityCleared } from './inspection.service';
+import { failPendingPayments, paymentSummary } from './payment.service';
 import { effectiveInvitationStatus, expireOverdueInvitations } from './invitationExpiry';
 import { cancelSubmittedQuotes, QUOTABLE_JOB_STATUSES } from './quote.service';
 
@@ -175,40 +177,71 @@ async function awardInTransaction(
     },
     include: awardInclude,
   });
+  await orderEvent(tx, user, order, 'QUOTE_AWARDED', { title: 'Quotation awarded', body: 'Your quotation was awarded. A new order has been created.' }, {
+    to: ['workshop'], metadata: { quoteId: found.id, agreedPrice: order.agreedPrice.toFixed(2) },
+  });
   return { created: true, order: orderView(order) };
 }
 
 // ---------- Buyer / workshop: read ----------
 
 export async function getOrderById(user: AuthUser, orderId: string) {
-  const scope = await participantScope(user);
+  // B1: the currently assigned inspector may read the order for QC, without its payments.
+  const isInspector = user.role === 'INSPECTOR';
+  const scope: Prisma.OrderWhereInput = isInspector
+    ? { inspectorAssignments: { some: { inspectorId: user.id, active: true } } }
+    : await participantScope(user);
   const order = await prisma.order.findFirst({
     where: { AND: [{ id: orderId }, scope] },
     include: {
       job: true,
       quote: true,
       workshop: { select: { id: true, businessName: true, city: true } },
+      // M10: the buyer's display name (no email) for workshop and inspector views.
+      buyer: { select: { id: true, name: true } },
+      rating: { select: { id: true, score: true, review: true, createdAt: true } },
       milestones: { orderBy: { sequence: 'asc' } },
-      inspections: { orderBy: { inspectedAt: 'desc' } },
-      payments: { orderBy: { createdAt: 'desc' } },
+      inspections: { orderBy: [{ inspectedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }] },
+      ...(!isInspector && { payments: { orderBy: { createdAt: 'desc' } } }),
     },
   });
   if (!order) throw orderNotFound();
   return orderView(order);
 }
 
-export async function listMyOrders(user: AuthUser) {
+/**
+ * Orders of the caller. view=summary (default) is the original list; view=full (M11)
+ * returns the same detail as GET /orders/:orderId for every order in one request
+ * (no per-order reads), for the buyer and workshop workspaces.
+ */
+export async function listMyOrders(user: AuthUser, view: 'summary' | 'full' = 'summary') {
   const scope = await participantScope(user);
+  const orderBy = [{ createdAt: 'desc' as const }, { id: 'asc' as const }];
+  if (view === 'full') {
+    const orders = await prisma.order.findMany({ where: scope, include: fullOrderInclude, orderBy });
+    return orders.map(orderView);
+  }
   const orders = await prisma.order.findMany({
     where: scope,
     include: {
       job: { select: { id: true, title: true, status: true, deadline: true } },
       workshop: { select: { id: true, businessName: true, city: true } },
     },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+    orderBy,
   });
   return orders.map(orderView);
 }
+
+const fullOrderInclude = {
+  job: true,
+  quote: true,
+  workshop: { select: { id: true, businessName: true, city: true } },
+  buyer: { select: { id: true, name: true } },
+  rating: { select: { id: true, score: true, review: true, createdAt: true } },
+  milestones: { orderBy: { sequence: 'asc' } },
+  inspections: { orderBy: [{ inspectedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }] },
+  payments: { orderBy: { createdAt: 'desc' } },
+} satisfies Prisma.OrderInclude;
 
 // ---------- I4b: order lifecycle (start / complete / cancel) ----------
 //
@@ -266,7 +299,12 @@ async function transitionOrder(user: AuthUser, orderId: string, action: Lifecycl
       if (job.status !== rule.jobTo) {
         throw ApiError.conflict(`Cannot ${rule.verb} this order: its job is ${job.status}`);
       }
-      return { changed: false, order: orderView(await tx.order.findUniqueOrThrow({ where: { id: found.id }, include: awardInclude })) };
+      const current = await tx.order.findUniqueOrThrow({ where: { id: found.id }, include: awardInclude });
+      return {
+        changed: false,
+        order: orderView(current),
+        ...(action === 'cancel' && { payments: await paymentSummary(tx, found.id, current.agreedPrice, current.status) }),
+      };
     }
     if (!rule.from.includes(order.status)) {
       if (action === 'complete' && order.status === 'CONFIRMED') {
@@ -306,6 +344,9 @@ async function transitionOrder(user: AuthUser, orderId: string, action: Lifecycl
         data: { status: 'EXPIRED' },
       });
       await cancelSubmittedQuotes(found.jobId, tx);
+      // B3: release reservations (PENDING -> FAILED). SUCCEEDED payments are kept and
+      // reported as refundDue until an explicit refund; cancelling never implies a refund.
+      await failPendingPayments(tx, found.id);
     }
 
     if (action === 'complete') {
@@ -318,7 +359,15 @@ async function transitionOrder(user: AuthUser, orderId: string, action: Lifecycl
     }
 
     const updated = await tx.order.findUniqueOrThrow({ where: { id: found.id }, include: awardInclude });
-    return { changed: true, order: orderView(updated) };
+    const verb = action === 'start' ? 'started' : action === 'complete' ? 'completed' : 'cancelled';
+    await orderEvent(tx, user, updated, 'ORDER_' + verb.toUpperCase(), { title: 'Order ' + verb, body: 'Order for ' + updated.job.title + ' was ' + verb + '.' }, {
+      metadata: { from: order.status, to: rule.to },
+    });
+    return {
+      changed: true,
+      order: orderView(updated),
+      ...(action === 'cancel' && { payments: await paymentSummary(tx, found.id, updated.agreedPrice, updated.status) }),
+    };
   });
 }
 

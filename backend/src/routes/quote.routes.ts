@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate';
 import {
   createQuoteBodySchema,
   updateQuoteBodySchema,
+  withdrawQuoteBodySchema,
   invitationIdParamsSchema,
   quoteIdParamsSchema,
   jobIdParamsSchema,
@@ -41,6 +42,14 @@ router.patch(
   authorize('WORKSHOP'),
   validate({ params: quoteIdParamsSchema, body: updateQuoteBodySchema }),
   quoteController.update,
+);
+
+// M10: the workshop withdraws its own SUBMITTED quote (no body).
+router.post(
+  '/:quoteId/withdraw',
+  authorize('WORKSHOP'),
+  validate({ params: quoteIdParamsSchema, body: withdrawQuoteBodySchema }),
+  quoteController.withdraw,
 );
 
 export default router;

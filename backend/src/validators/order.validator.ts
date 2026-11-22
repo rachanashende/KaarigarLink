@@ -8,6 +8,9 @@ export const orderIdParamsSchema = z.object({
   orderId: z.string().min(1),
 });
 
+/** M11: GET /orders/mine?view=summary|full (default summary). */
+export const mineQuerySchema = z.object({ view: z.enum(['summary', 'full']).default('summary') }).strict();
+
 /** Award takes no body: the server derives everything from the quote (any field -> 400). */
 export const awardBodySchema = z.object({}).strict();
 

@@ -7,6 +7,13 @@ export interface TokenPayload {
   sub: string; // user id
   email: string;
   role: Role;
+  /**
+   * M13: the user's tokenVersion when the token was issued. Missing in tokens issued
+   * before M13, which count as version 0.
+   */
+  tv?: number;
+  /** Issued-at (seconds), added by jsonwebtoken. */
+  iat?: number;
 }
 
 export function signToken(payload: TokenPayload): string {

@@ -35,8 +35,24 @@ const envSchema = z
     JWT_EXPIRES_IN: z.string().default('7d'),
     CORS_ORIGINS: z.string().trim().optional(),
     BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
+    /** M12: local document storage root (outside any publicly served directory). */
+    FILE_STORAGE_DIR: z.string().trim().min(1).default('storage/uploads'),
+    /** M12: maximum size of one uploaded document, in bytes (default 10 MB). */
+    MAX_UPLOAD_BYTES: z.coerce.number().int().min(1024).max(100 * 1024 * 1024).default(10 * 1024 * 1024),
+    /**
+     * Development-only one-click demo login (POST /api/auth/demo-login). Off unless exactly
+     * "true", and honoured only when NODE_ENV is development. Never set it in production.
+     */
+    ENABLE_DEMO_LOGIN: z.enum(['true', 'false']).optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.NODE_ENV === 'production' && data.ENABLE_DEMO_LOGIN === 'true') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ENABLE_DEMO_LOGIN'],
+        message: 'ENABLE_DEMO_LOGIN must not be enabled in production (remove it or set it to false)',
+      });
+    }
     const raw = data.CORS_ORIGINS;
     if (data.NODE_ENV === 'production' && !raw) {
       ctx.addIssue({
@@ -82,6 +98,8 @@ export function parseEnv(source: NodeJS.ProcessEnv) {
       corsOrigins,
       isProduction: data.NODE_ENV === 'production',
       isTest: data.NODE_ENV === 'test',
+      /** Demo login is available only in development with ENABLE_DEMO_LOGIN=true. */
+      demoLoginEnabled: data.NODE_ENV === 'development' && data.ENABLE_DEMO_LOGIN === 'true',
     },
   };
 }

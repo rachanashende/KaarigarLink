@@ -21,6 +21,11 @@ export async function update(req: Request, res: Response) {
   sendSuccess(res, { quote }, 'Quote updated successfully');
 }
 
+export async function withdraw(req: Request, res: Response) {
+  const result = await quoteService.withdrawQuote(req.user!, req.params.quoteId as string, req.body?.expectedUpdatedAt);
+  sendSuccess(res, result, result.changed ? 'Quote withdrawn' : 'Quote already withdrawn');
+}
+
 export async function listForJob(req: Request, res: Response) {
   const quotes = await quoteService.listQuotesForJob(
     req.user!,

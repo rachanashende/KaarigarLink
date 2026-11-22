@@ -3,6 +3,7 @@ import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import type { CreateJobInput, ListJobsQuery, UpdateJobInput } from '../validators/job.validator';
+import { recordEvent } from './events';
 import { cancelSubmittedQuotes } from './quote.service';
 
 export const jobDetailInclude = {
@@ -35,15 +36,19 @@ const jobNotFound = () => ApiError.notFound('Job not found');
 export async function createJob(user: AuthUser, input: CreateJobInput) {
   const { requirements, technicalSpecifications, ...fields } = input;
 
-  // Nested create = job and requirements are written atomically.
-  return prisma.job.create({
-    data: {
-      ...fields,
-      buyerId: user.id,
-      technicalSpecifications: technicalSpecifications as Prisma.InputJsonValue | undefined,
-      requirements: { create: requirements },
-    },
-    include: jobDetailInclude,
+  // Nested create = job and requirements are written atomically; M12: with its audit event.
+  return prisma.$transaction(async (tx) => {
+    const job = await tx.job.create({
+      data: {
+        ...fields,
+        buyerId: user.id,
+        technicalSpecifications: technicalSpecifications as Prisma.InputJsonValue | undefined,
+        requirements: { create: requirements },
+      },
+      include: jobDetailInclude,
+    });
+    await recordEvent(tx, { actor: user, action: 'JOB_CREATED', entityType: 'Job', entityId: job.id, jobId: job.id, metadata: { status: job.status } });
+    return job;
   });
 }
 
@@ -153,6 +158,11 @@ export async function updateJob(user: AuthUser, id: string, input: UpdateJobInpu
       await cancelSubmittedQuotes(id, tx);
     }
 
+    // M12: field names only (no values), plus the new status when it changed.
+    await recordEvent(tx, {
+      actor: user, action: input.status === 'CANCELLED' ? 'JOB_CANCELLED' : 'JOB_UPDATED', entityType: 'Job', entityId: id, jobId: id,
+      metadata: { fields: Object.keys(input), ...(input.status && { status: input.status }) },
+    });
     return tx.job.findUniqueOrThrow({ where: { id }, include: jobDetailInclude });
   });
 }

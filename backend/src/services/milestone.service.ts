@@ -23,6 +23,7 @@ import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import { getMyWorkshopId } from './workshop.service';
 import { findParticipantOrder, isUniqueViolation, lockOrder, type Tx } from './orderAccess';
+import { orderEvent } from './events';
 import type { CreateMilestoneInput, UpdateMilestoneInput } from '../validators/milestone.validator';
 
 const milestoneNotFound = () => ApiError.notFound('Milestone not found');
@@ -64,7 +65,7 @@ export async function createMilestone(user: AuthUser, orderId: string, input: Cr
     return await prisma.$transaction(async (tx) => {
       assertOrderEditable((await lockOrder(tx, ref)).status);
       await assertSequenceAllowed(tx, ref.id, input.sequence);
-      return tx.milestone.create({
+      const created = await tx.milestone.create({
         data: {
           orderId: ref.id,
           title: input.title,
@@ -73,6 +74,10 @@ export async function createMilestone(user: AuthUser, orderId: string, input: Cr
           dueDate: input.dueDate,
         },
       });
+      await orderEvent(tx, user, ref, 'MILESTONE_CREATED', { title: 'Milestone planned', body: 'New production milestone: ' + created.title }, {
+        entityType: 'Milestone', entityId: created.id, metadata: { sequence: created.sequence }, to: ['buyer'],
+      });
+      return created;
     });
   } catch (err) {
     if (isUniqueViolation(err)) throw duplicateSequence(input.sequence);
@@ -179,7 +184,11 @@ async function transitionMilestone(user: AuthUser, milestoneId: string, action: 
       },
     });
     if (count !== 1) throw ApiError.conflict('Milestone was modified, please retry');
-    return { changed: true, milestone: await tx.milestone.findUniqueOrThrow({ where: { id: milestoneId } }) };
+    const milestone = await tx.milestone.findUniqueOrThrow({ where: { id: milestoneId } });
+    await orderEvent(tx, user, order, 'MILESTONE_' + (action === 'start' ? 'STARTED' : action === 'complete' ? 'COMPLETED' : 'APPROVED'), {
+      title: 'Milestone ' + rule.verb, body: milestone.sequence + '. ' + milestone.title + ' was ' + rule.verb + '.',
+    }, { entityType: 'Milestone', entityId: milestoneId, metadata: { from: current.status, to: rule.to }, to: action === 'approve' ? ['workshop', 'inspector'] : ['buyer', 'inspector'] });
+    return { changed: true, milestone };
   });
 }
 

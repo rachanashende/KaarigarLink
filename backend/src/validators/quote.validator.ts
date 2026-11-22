@@ -32,15 +32,23 @@ export const createQuoteBodySchema = z
   })
   .strict();
 
+/** An ISO date-time as returned in a quote updatedAt. */
+const expectedVersion = z.string().datetime({ offset: true, message: 'expectedUpdatedAt must be an ISO date-time' });
+
+/** M11: POST /api/quotes/:quoteId/withdraw (body optional). */
+export const withdrawQuoteBodySchema = z.object({ expectedUpdatedAt: expectedVersion.optional() }).strict();
+
 export const updateQuoteBodySchema = z
   .object({
     totalPrice: moneySchema.optional(),
     estimatedDays: estimatedDaysSchema.optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
     validUntil: validUntilSchema.nullable().optional(),
+    /** M11 optimistic concurrency: the quote updatedAt the client last read. Stale -> 409. */
+    expectedUpdatedAt: expectedVersion.optional(),
   })
   .strict()
-  .refine((data) => Object.keys(data).length > 0, {
+  .refine((data) => Object.keys(data).some((key) => key !== 'expectedUpdatedAt'), {
     message: 'At least one field must be provided',
   });
 

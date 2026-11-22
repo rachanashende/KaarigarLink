@@ -4,6 +4,7 @@
  * Out of scope on purpose (Member 2): accepting or declining an invitation
  * never creates a quote or order and never changes the job status.
  */
+import { links, recordEvent, workshopOwnerId } from './events';
 import { Prisma, type InvitationStatus, type JobInvitation } from '@prisma/client';
 import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
@@ -71,6 +72,7 @@ const workshopJobSelect = {
   address: true,
   technicalSpecifications: true,
   status: true,
+  createdAt: true, // M13 (BUG-08): shown as "Job created" on the workshop invitation
   requirements: {
     select: { requirementType: true, requirementValue: true, isMandatory: true },
     orderBy: [{ requirementType: 'asc' }, { requirementValue: 'asc' }],
@@ -153,7 +155,7 @@ export async function inviteWorkshop(user: AuthUser, jobId: string, workshopId: 
       }
 
       // 3. Create. The unique (jobId, workshopId) index guarantees a single row.
-      return tx.jobInvitation.create({
+      const created = await tx.jobInvitation.create({
         data: {
           jobId,
           workshopId,
@@ -165,6 +167,13 @@ export async function inviteWorkshop(user: AuthUser, jobId: string, workshopId: 
           status: 'INVITED',
         },
       });
+      const ownerId = await workshopOwnerId(tx, workshopId);
+      await recordEvent(tx, {
+        actor: user, action: 'WORKSHOP_INVITED', entityType: 'Invitation', entityId: created.id, jobId,
+        metadata: { workshopId, matchScore: match.score! },
+        notify: ownerId ? [{ userId: ownerId, title: 'New job invitation', body: 'A buyer invited your workshop to quote: ' + job.title, link: links.workshopInvitation(created.id) }] : [],
+      });
+      return created;
     });
     const jobState = { deadline: job.deadline, status: 'MATCHED' as const };
     return { created: true, invitation: buyerView(invitation, jobState, now), jobStatus: 'MATCHED' as const };
@@ -285,5 +294,10 @@ export async function respondToInvitation(user: AuthUser, invitationId: string, 
   }
 
   const { job: { buyer, ...job }, ...inv } = after;
+  // M12: recorded after the single conditional update succeeded (count === 1).
+  await recordEvent(prisma, {
+    actor: user, action: 'INVITATION_' + input.response, entityType: 'Invitation', entityId: invitationId, jobId: after.jobId,
+    notify: [{ userId: buyer.id, title: 'Invitation ' + input.response.toLowerCase(), body: 'A workshop ' + input.response.toLowerCase() + ' your invitation for ' + job.title, link: '/buyer/jobs/' + encodeURIComponent(after.jobId) + '/matches' }],
+  });
   return { ...workshopView(inv, job, now), job, buyer };
 }
