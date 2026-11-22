@@ -3,6 +3,7 @@ import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import type { CreateJobInput, ListJobsQuery, UpdateJobInput } from '../validators/job.validator';
+import { cancelSubmittedQuotes } from './quote.service';
 
 export const jobDetailInclude = {
   buyer: { select: { id: true, name: true } },
@@ -148,6 +149,8 @@ export async function updateJob(user: AuthUser, id: string, input: UpdateJobInpu
         where: { jobId: id, status: { in: ['INVITED', 'ACCEPTED'] } },
         data: { status: 'EXPIRED' },
       });
+      // ...and neither are its submitted quotes (lock order: job -> invitations -> quotes).
+      await cancelSubmittedQuotes(id, tx);
     }
 
     return tx.job.findUniqueOrThrow({ where: { id }, include: jobDetailInclude });

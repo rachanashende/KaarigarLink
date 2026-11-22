@@ -45,7 +45,7 @@ IDs are strings (cuid). Dates are ISO 8601 strings. Coordinates are decimal degr
 | JobStatus | `DRAFT` `OPEN` `MATCHED` `AWARDED` `IN_PROGRESS` `COMPLETED` `CANCELLED` |
 | RequirementType | `MACHINE_TYPE` `TOLERANCE_MM` `PART_SIZE_MM` `CERTIFICATION` `OTHER` |
 | InvitationStatus | `INVITED` `ACCEPTED` `DECLINED` `EXPIRED` |
-| QuoteStatus | `SUBMITTED` `ACCEPTED` `REJECTED` `WITHDRAWN` |
+| QuoteStatus | `SUBMITTED` `ACCEPTED` `REJECTED` `WITHDRAWN` `CANCELLED` |
 
 ---
 
@@ -303,7 +303,7 @@ Owning buyer only. Send any subset of the create fields. `description`, `address
 
 **Cancelling a job.** Send `PUT /api/jobs/:id` with `{ "status": "CANCELLED" }`. There is no DELETE.
 - Allowed from `DRAFT`, `OPEN` or `MATCHED`. Not allowed once `AWARDED` or later: that's order cancellation, which belongs to Member 2's module.
-- In the same transaction, every invitation for the job that is still `INVITED` or `ACCEPTED` becomes `EXPIRED`. `DECLINED` invitations are left as they are.
+- In the same transaction, every invitation for the job that is still `INVITED` or `ACCEPTED` becomes `EXPIRED`. `DECLINED` invitations are left as they are. Every `SUBMITTED` quote for the job becomes `CANCELLED`, and quotes in other statuses are left as they are (see [Quotations](#quotations-)).
 - Cancelling is final: a `CANCELLED` job can't be reopened or edited (`409`). The job stays in the buyer's list with `status: "CANCELLED"`.
 - Sending a job's current status again (e.g. `CANCELLED` on a cancelled job) changes nothing and returns `200`.
 
@@ -653,9 +653,22 @@ A quote can be submitted or edited only while **all** of these hold:
 | Edit only: the quote is `SUBMITTED` | `409 "Only SUBMITTED quotes can be edited (this quote is ACCEPTED)"` |
 
 - **One quote per invitation**, so one per workshop and job. A second submission → `409 "A quote already exists for this invitation; update it instead"`. The database enforces this too, so parallel submissions still produce exactly one quote.
-- **Expiry:** before checking, overdue `INVITED` invitations are saved as `EXPIRED` with the same lazy-expiry helper the invitation endpoints use. Cancelling a job expires its `INVITED` and `ACCEPTED` invitations (see [Invitations](#invitations-)), so its quotes can no longer be edited.
+- **Expiry:** before checking, overdue `INVITED` invitations are saved as `EXPIRED` with the same lazy-expiry helper the invitation endpoints use.
+- **Job cancellation:** cancelling a job (`PUT /api/jobs/:id` with `status: CANCELLED`) expires its `INVITED` and `ACCEPTED` invitations (see [Invitations](#invitations-)) **and sets its `SUBMITTED` quotes to `CANCELLED`**, in the same transaction. If any step fails, nothing changes. Quotes in other statuses are left as they are. A quote being submitted at the same moment is either refused with `409` or committed first and then cancelled, so a cancelled job never keeps a `SUBMITTED` quote.
 - **Concurrency:** the checks and the write happen in one transaction that holds a shared lock on the job and the invitation, plus a row lock on the quote for edits. A cancellation or other job change that happens at the same moment either waits for the quote write, or makes the quote request wait and then get the `409` for the new state. A quote is never written against a job or invitation state that has already changed.
 - Changing a quote does not change the job or invitation.
+
+**Quote statuses**
+
+| Status | Set by | Meaning |
+|---|---|---|
+| `SUBMITTED` | the workshop submitting | Live offer; the workshop can still edit it |
+| `ACCEPTED` | the buyer's award (order workflow, not part of this API yet) | The chosen quote |
+| `REJECTED` | the same award | Another quote for the job was chosen |
+| `WITHDRAWN` | reserved: no endpoint sets it yet | The workshop withdrew its quote |
+| `CANCELLED` | the system, when the buyer cancels the job | The job was cancelled. Neither the workshop nor the buyer judged the quote |
+
+Only `SUBMITTED` quotes can change. Every other status is final.
 
 ### Money and fields
 - `totalPrice` is sent as a JSON number (`12500.5`) or a decimal string (`"12500.50"`). It must be > 0, with at most 2 decimal places and at most 10 digits before the point (max `9999999999.99`). Exponent notation is rejected. It is stored exactly and **always returned as a 2-decimal string**, e.g. `"12500.50"`.

@@ -18,8 +18,9 @@ All seed accounts log in with `SEED_DEFAULT_PASSWORD`, for example `POST /api/au
 | | |
 |---|---|
 | **Repeatable** | Fixed ids (`seed-…`). Re-running updates in place, creates no duplicates, and keeps ids stable. |
-| **Resets to a known state** | Re-running restores seed records changed during a demo, removes machines, capabilities and capacity windows added to seed workshops, and **deletes invitations on seed jobs**, which returns them to `OPEN`/`DRAFT`. |
-| **Never touches real data** | Only records with ids starting `seed-` are written. If a real account already uses a seed email, the seed aborts and **changes nothing**. |
+| **Resets to a known state** | Re-running restores seed records changed during a demo, removes machines, capabilities and capacity windows added to seed workshops, and **deletes the quotes and invitations on seed jobs** (quotes first, because they reference the invitations), which returns the jobs to `OPEN`/`DRAFT`. The summary reports how many quotes and invitations were cleared. |
+| **Never touches real data** | Only seed records (ids starting `seed-`) are written, plus the quotes and invitations on seed jobs, which are demo state. Everything else, including quotes by seed workshops on real jobs, is left as it is. If a real account already uses a seed email, the seed aborts and **changes nothing**. |
+| **Never rewrites order history** | If any order exists on a seed job, or with a seed workshop (even on a real job), the seed aborts with `Orders exist on seed jobs or seed workshops: …` and **changes nothing**. Resetting would otherwise roll back an awarded job or overwrite ratings earned through real orders. Orders are never deleted by the seed. |
 | **All or nothing** | The whole seed runs in one transaction. |
 | **Passwords** | Hashed with bcrypt, the same library and `BCRYPT_SALT_ROUNDS` as registration. No plaintext is stored or committed. |
 | **Production** | Refuses when `NODE_ENV=production` unless `SEED_ALLOW_PRODUCTION=true` (for a demo deployment only). |

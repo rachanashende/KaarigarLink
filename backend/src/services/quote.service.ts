@@ -81,6 +81,25 @@ async function lockAcceptedInvitation(tx: Tx, invitationId: string, job: Invitat
 const isUniqueViolation = (err: unknown) =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 
+// ---------- Job cancellation ----------
+
+/**
+ * I3: when a job is cancelled, its SUBMITTED quotes become CANCELLED. Other
+ * statuses (ACCEPTED, REJECTED, WITHDRAWN, CANCELLED) never change. Call it
+ * inside the cancellation transaction, after the job row has been written and
+ * its invitations expired, which keeps the lock order job -> invitations ->
+ * quotes. A quote submitted at the same moment holds the job FOR SHARE, so the
+ * cancellation's job write waits for it, and this statement (which starts
+ * afterwards) also catches that quote. Returns how many quotes were cancelled.
+ */
+export async function cancelSubmittedQuotes(jobId: string, db: Pick<typeof prisma, 'quote'> = prisma): Promise<number> {
+  const { count } = await db.quote.updateMany({
+    where: { jobId, status: 'SUBMITTED' },
+    data: { status: 'CANCELLED' },
+  });
+  return count;
+}
+
 // ---------- Workshop: submit ----------
 
 export async function createQuote(user: AuthUser, invitationId: string, input: CreateQuoteInput) {

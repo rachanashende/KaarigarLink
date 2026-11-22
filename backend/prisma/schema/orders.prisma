@@ -3,6 +3,8 @@ enum QuoteStatus {
   ACCEPTED
   REJECTED
   WITHDRAWN
+  /// Set by the system when the buyer cancels the job (not a workshop or buyer decision).
+  CANCELLED
 }
 
 enum OrderStatus {

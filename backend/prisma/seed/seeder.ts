@@ -29,6 +29,7 @@ export interface SeedSummary {
   capacities: number;
   jobs: number;
   requirements: number;
+  quotesCleared: number;
   invitationsCleared: number;
 }
 
@@ -86,11 +87,33 @@ export async function runSeed(prisma: PrismaClient, options: SeedOptions): Promi
     capacities: 0,
     jobs: 0,
     requirements: 0,
+    quotesCleared: 0,
     invitationsCleared: 0,
   };
 
+  const seedJobIds = JOBS.map((j) => j.id);
+  const seedWorkshopIds = WORKSHOPS.map((w) => w.id);
+
   await prisma.$transaction(
     async (tx) => {
+      // ---- Safety: order history is never deleted or rewritten ----
+      // Orders (and their milestones, inspections, payments, ratings) are real
+      // history. Resetting a seed job would rewrite an awarded job, and resetting
+      // a seed workshop would overwrite ratings earned through real orders, so
+      // refuse instead. Checked inside the transaction, before any write.
+      const blockingOrders = await tx.order.findMany({
+        where: { OR: [{ jobId: { in: seedJobIds } }, { workshopId: { in: seedWorkshopIds } }] },
+        select: { id: true, jobId: true, workshopId: true },
+        orderBy: { id: 'asc' },
+        take: 5,
+      });
+      if (blockingOrders.length > 0) {
+        const list = blockingOrders.map((o) => `${o.id} (job ${o.jobId}, workshop ${o.workshopId})`).join(', ');
+        throw new SeedConflictError(
+          `Orders exist on seed jobs or seed workshops: ${list}. Seeding would rewrite order history, so nothing was changed.`,
+        );
+      }
+
       // ---- Users ----
       for (const u of ALL_USERS) {
         const existing = await tx.user.findUnique({ where: { id: u.id }, select: { passwordHash: true } });
@@ -177,9 +200,14 @@ export async function runSeed(prisma: PrismaClient, options: SeedOptions): Promi
       }
 
       // ---- Jobs and requirements ----
-      const jobIds = JOBS.map((j) => j.id);
       // Reset matching state of seed jobs so every run starts from the same point.
-      const cleared = await tx.jobInvitation.deleteMany({ where: { jobId: { in: jobIds } } });
+      // Quotes first: they reference the invitations (onDelete: Restrict). No order
+      // can reference them here - the guard above refused any order on a seed job.
+      const clearedQuotes = await tx.quote.deleteMany({
+        where: { OR: [{ jobId: { in: seedJobIds } }, { invitation: { is: { jobId: { in: seedJobIds } } } }] },
+      });
+      summary.quotesCleared = clearedQuotes.count;
+      const cleared = await tx.jobInvitation.deleteMany({ where: { jobId: { in: seedJobIds } } });
       summary.invitationsCleared = cleared.count;
 
       for (const j of JOBS) {
@@ -217,7 +245,8 @@ export async function runSeed(prisma: PrismaClient, options: SeedOptions): Promi
     `Seeded ${summary.users} users, ${summary.workshops} workshops (${summary.machines} machines, ` +
       `${summary.capabilities} capabilities, ${summary.capacities} capacity windows), ` +
       `${summary.jobs} jobs (${summary.requirements} requirements). ` +
-      `Cleared ${summary.invitationsCleared} seed-job invitations. Accounts use @${SEED_EMAIL_DOMAIN}.`,
+      `Cleared ${summary.quotesCleared} seed-job quotes and ${summary.invitationsCleared} seed-job invitations. ` +
+      `Accounts use @${SEED_EMAIL_DOMAIN}.`,
   );
   return summary;
 }
