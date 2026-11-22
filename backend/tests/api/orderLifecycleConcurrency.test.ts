@@ -91,6 +91,14 @@ const act = async (orderId: string, action: 'start' | 'complete' | 'cancel') => 
   const req = request(app).post(`/api/orders/${orderId}/${action}`).set(auth(await tokenFor(as)));
   return action === 'cancel' ? req.send({ reason: 'Buyer changed plans' }) : req;
 };
+/** I5: completion needs a PASSED inspection first. */
+const passQc = async (orderId: string) => {
+  const res = await request(app)
+    .post(`/api/orders/${orderId}/inspections`)
+    .set(auth(await tokenFor('seed-user-inspector')))
+    .send({ status: 'PASSED' });
+  expect(res.status).toBe(201);
+};
 const completedCount = async () => (await prisma.workshop.findUniqueOrThrow({ where: { id: PRECISION } })).totalCompletedJobs;
 
 /** Order and job always agree after any race. */
@@ -117,6 +125,7 @@ describe('order lifecycle concurrency', () => {
   it('parallel completions: exactly one changes the order and the count goes up once', async () => {
     const orderId = await awardedOrder();
     await act(orderId, 'start');
+    await passQc(orderId);
     const before = await completedCount();
     const results = await Promise.all([1, 2, 3, 4].map(() => act(orderId, 'complete')));
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200]);
@@ -168,6 +177,7 @@ describe('order lifecycle concurrency', () => {
   it('a completion waiting behind an in-flight cancellation is rejected and does not count', async () => {
     const orderId = await awardedOrder();
     await act(orderId, 'start');
+    await passQc(orderId);
     const before = await completedCount();
     const cancelling = holdLock(
       (tx) => tx.$queryRaw`SELECT 1 FROM "Job" WHERE "id" = ${BRACKETS} FOR UPDATE`,
@@ -192,6 +202,7 @@ describe('order lifecycle concurrency', () => {
       if (round > 0) await freshSession();
       const orderId = await awardedOrder();
       await act(orderId, 'start');
+      await passQc(orderId);
       const before = await completedCount();
       const [rd, rc] = await Promise.all([act(orderId, 'complete'), act(orderId, 'cancel')]);
       expect([rd.status, rc.status].sort()).toEqual([200, 409]);
@@ -211,6 +222,7 @@ describe('order lifecycle concurrency', () => {
   it('a profile edit that read the workshop before a completion still succeeds (no version bump)', async () => {
     const orderId = await awardedOrder();
     await act(orderId, 'start');
+    await passQc(orderId);
     const before = await completedCount();
     // The edit's pre-read happens, then a real completion commits, then the edit writes.
     afterNextWorkshopRead(async () => {
@@ -229,6 +241,7 @@ describe('order lifecycle concurrency', () => {
   it('a completion waits for an in-flight profile edit holding the workshop row, then both apply', async () => {
     const orderId = await awardedOrder();
     await act(orderId, 'start');
+    await passQc(orderId);
     const before = await completedCount();
     const editing = holdLock(
       (tx) => tx.$queryRaw`SELECT 1 FROM "Workshop" WHERE "id" = ${PRECISION} FOR UPDATE`,
@@ -249,6 +262,7 @@ describe('order lifecycle concurrency', () => {
   it('an invite of the same workshop whose matching ran before a completion still succeeds', async () => {
     const orderId = await awardedOrder();
     await act(orderId, 'start');
+    await passQc(orderId);
     // The invite's matching snapshot is taken, then a real completion commits; the invite's
     // re-check of the workshop version must not see a change.
     afterNextMatchingRead(async () => {
@@ -261,6 +275,7 @@ describe('order lifecycle concurrency', () => {
   it('completion, a profile edit and an invite of the same workshop in parallel: no deadlock, no conflict', async () => {
     const orderId = await awardedOrder();
     await act(orderId, 'start');
+    await passQc(orderId);
     const before = await completedCount();
     const [rd, re, ri] = await Promise.all([
       act(orderId, 'complete'),

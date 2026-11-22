@@ -68,6 +68,15 @@ const complete = (orderId: string, as = ASHA, body?: Record<string, unknown>) =>
 const cancel = (orderId: string, reason: unknown = 'Buyer changed plans', as = ASHA) =>
   act(orderId, 'cancel', as, { reason });
 
+/** I5: completion needs a PASSED inspection (recorded by the seed inspector). */
+const passQc = async (orderId: string) => {
+  const res = await request(app)
+    .post(`/api/orders/${orderId}/inspections`)
+    .set(auth(await tokenFor(INSPECTOR)))
+    .send({ status: 'PASSED' });
+  expect(res.status).toBe(201);
+};
+
 const orderRow = (id: string) => prisma.order.findUniqueOrThrow({ where: { id } });
 const jobRow = () => prisma.job.findUniqueOrThrow({ where: { id: BRACKETS } });
 const workshopRow = () => prisma.workshop.findUniqueOrThrow({ where: { id: PRECISION } });
@@ -118,7 +127,7 @@ describe('start: CONFIRMED -> IN_PROGRESS', () => {
   it.each(['COMPLETED', 'CANCELLED'] as const)('cannot start a %s order (409)', async (status) => {
     const { orderId } = await awardedOrder();
     await start(orderId);
-    if (status === 'COMPLETED') await complete(orderId);
+    if (status === 'COMPLETED') { await passQc(orderId); await complete(orderId); }
     else await cancel(orderId);
     const res = await start(orderId);
     expect(res.status).toBe(409);
@@ -134,6 +143,7 @@ describe('complete: IN_PROGRESS -> COMPLETED', () => {
     await start(orderId);
     const wsBefore = await workshopRow();
     const t0 = Date.now();
+    await passQc(orderId);
     const res = await complete(orderId);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ message: 'Order completed', data: { changed: true } });
@@ -151,6 +161,7 @@ describe('complete: IN_PROGRESS -> COMPLETED', () => {
     const { orderId } = await awardedOrder();
     await start(orderId);
     const before = (await workshopRow()).totalCompletedJobs;
+    await passQc(orderId);
     const first = await complete(orderId);
     const again = await complete(orderId);
     expect(again.status).toBe(200);
@@ -182,6 +193,7 @@ describe('complete: IN_PROGRESS -> COMPLETED', () => {
     const { orderId } = await awardedOrder();
     await start(orderId);
     await prisma.job.update({ where: { id: BRACKETS }, data: { deadline: new Date(Date.now() - 86_400_000) } });
+    await passQc(orderId);
     expect((await complete(orderId)).status).toBe(200);
   });
 
@@ -189,6 +201,7 @@ describe('complete: IN_PROGRESS -> COMPLETED', () => {
     const { orderId } = await awardedOrder();
     await start(orderId);
     const before = (await workshopRow()).totalCompletedJobs;
+    await passQc(orderId);
     await complete(orderId);
     const matches = await request(app).get(`/api/jobs/${SHAFTS}/matches`).set(auth(await tokenFor(ASHA)));
     const row = matches.body.data.results.find((r: { workshopId: string }) => r.workshopId === PRECISION);
@@ -198,6 +211,7 @@ describe('complete: IN_PROGRESS -> COMPLETED', () => {
   it('is atomic: if the count increment fails, order, job and count are unchanged', async () => {
     const { orderId } = await awardedOrder();
     await start(orderId);
+    await passQc(orderId);
     const before = await workshopRow();
     await prisma.$executeRawUnsafe(`
       CREATE OR REPLACE FUNCTION i4b_fail_increment() RETURNS trigger AS $$
@@ -277,6 +291,7 @@ describe('cancel: CONFIRMED / IN_PROGRESS -> CANCELLED', () => {
   it('a COMPLETED order cannot be cancelled (409)', async () => {
     const { orderId } = await awardedOrder();
     await start(orderId);
+    await passQc(orderId);
     await complete(orderId);
     const res = await cancel(orderId);
     expect(res.status).toBe(409);
@@ -360,7 +375,7 @@ describe('permissions and input', () => {
   ] as const)('a repeated $action whose job is out of sync ($jobStatus) is refused (409) and writes nothing', async ({ action, jobStatus }) => {
     const { orderId } = await awardedOrder();
     expect((await start(orderId)).status).toBe(200);
-    if (action === 'complete') expect((await complete(orderId)).status).toBe(200);
+    if (action === 'complete') { await passQc(orderId); expect((await complete(orderId)).status).toBe(200); }
     if (action === 'cancel') expect((await cancel(orderId, 'Original reason')).status).toBe(200);
 
     await prisma.job.update({ where: { id: BRACKETS }, data: { status: jobStatus } });
@@ -388,7 +403,7 @@ describe('I4 award replay after lifecycle transitions', () => {
   it.each(['IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const)('awarding the same quote again after %s returns the existing order (200)', async (state) => {
     const { orderId, winner, loser } = await awardedOrder();
     if (state !== 'CANCELLED') await start(orderId);
-    if (state === 'COMPLETED') await complete(orderId);
+    if (state === 'COMPLETED') { await passQc(orderId); await complete(orderId); }
     if (state === 'CANCELLED') await cancel(orderId);
     const count = (await workshopRow()).totalCompletedJobs;
 
@@ -404,6 +419,7 @@ describe('I4 award replay after lifecycle transitions', () => {
   it('the lifecycle is visible in order lookup and /orders/mine', async () => {
     const { orderId } = await awardedOrder();
     await start(orderId);
+    await passQc(orderId);
     await complete(orderId);
     const read = await request(app).get(`/api/orders/${orderId}`).set(auth(await tokenFor(owner(PRECISION))));
     expect(read.body.data.order).toMatchObject({ status: 'COMPLETED', job: { status: 'COMPLETED' } });

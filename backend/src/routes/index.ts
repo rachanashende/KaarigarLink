@@ -6,6 +6,8 @@ import invitationRoutes from './invitation.routes';
 import { health } from '../controllers/health.controller';
 import quoteRoutes from './quote.routes';
 import orderRoutes from './order.routes';
+import milestoneRoutes from './milestone.routes';
+import paymentRoutes from './payment.routes';
 
 /**
  * Central router mounted at /api.
@@ -20,5 +22,7 @@ router.use('/jobs', jobRoutes);
 router.use('/invitations', invitationRoutes);
 router.use('/quotes', quoteRoutes);
 router.use('/orders', orderRoutes);
+router.use('/milestones', milestoneRoutes);
+router.use('/payments', paymentRoutes);
 
 export default router;

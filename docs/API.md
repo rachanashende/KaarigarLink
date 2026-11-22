@@ -46,6 +46,10 @@ IDs are strings (cuid). Dates are ISO 8601 strings. Coordinates are decimal degr
 | RequirementType | `MACHINE_TYPE` `TOLERANCE_MM` `PART_SIZE_MM` `CERTIFICATION` `OTHER` |
 | InvitationStatus | `INVITED` `ACCEPTED` `DECLINED` `EXPIRED` |
 | QuoteStatus | `SUBMITTED` `ACCEPTED` `REJECTED` `WITHDRAWN` `CANCELLED` |
+| OrderStatus | `CONFIRMED` `IN_PROGRESS` `COMPLETED` `CANCELLED` |
+| MilestoneStatus | `PENDING` `IN_PROGRESS` `COMPLETED` `APPROVED` `REWORK_REQUIRED` |
+| InspectionStatus | `PASSED` `FAILED` `REWORK_REQUIRED` |
+| PaymentStatus | `PENDING` `SUCCEEDED` `FAILED` `REFUNDED` (`REFUNDED` is not used yet) |
 
 ---
 
@@ -726,7 +730,7 @@ WORKSHOP only; quotes from the caller's own workshop, newest first. Each quote i
 
 ## Orders ✅
 
-The buyer awards **one** quote for a job. Awarding creates the job's **single order** in one transaction. The awarded workshop then **starts** the order and the buyer **completes** or **cancels** it (see [Order lifecycle](#order-lifecycle)). Milestones, inspections, payments and ratings are not exposed yet (I5).
+The buyer awards **one** quote for a job. Awarding creates the job's **single order** in one transaction. The awarded workshop then **starts** the order and the buyer **completes** or **cancels** it (see [Order lifecycle](#order-lifecycle)). Each order has [milestones](#milestones-), [inspections / QC](#inspections--qc-), [payments (simulated)](#payments-simulated-) and one [rating](#ratings-).
 
 | Method & path | Role | Purpose |
 |---|---|---|
@@ -821,7 +825,7 @@ The order and its job always change **together, in one transaction**. Each trans
 | Endpoint | Body | From | Effects |
 |---|---|---|---|
 | `POST /api/orders/:orderId/start` | none (any field → `400`) | `CONFIRMED` | Order and job → `IN_PROGRESS`. The workshop doesn't need to still be `VERIFIED` (checked at award) |
-| `POST /api/orders/:orderId/complete` | none (any field → `400`) | `IN_PROGRESS` | Order and job → `COMPLETED`; `actualCompletionDate` = now; the workshop's `totalCompletedJobs` + 1 (exactly once). Allowed after the job deadline. No inspection is required yet; a QC gate is planned for I5 |
+| `POST /api/orders/:orderId/complete` | none (any field → `400`) | `IN_PROGRESS` | Order and job → `COMPLETED`; `actualCompletionDate` = now; the workshop's `totalCompletedJobs` + 1 (exactly once). Allowed after the job deadline. **QC gate:** the latest inspection must be `PASSED`. Milestone statuses are not checked |
 | `POST /api/orders/:orderId/cancel` | `{ "reason": "…" }` | `CONFIRMED`, `IN_PROGRESS` | Order and job → `CANCELLED`; `reason` stored as `cancellationReason`; the job's `INVITED`/`ACCEPTED` invitations → `EXPIRED` (the same rule as job cancellation; `DECLINED`/`EXPIRED` are kept). The accepted quote **stays `ACCEPTED`**, and rejected quotes stay `REJECTED` |
 
 `reason` is required: a string, trimmed, 3-1000 characters. Any other field → `400`.
@@ -841,7 +845,109 @@ The order and its job always change **together, in one transaction**. Each trans
 | `401` / `403` | no token / wrong role (start: WORKSHOP only; complete and cancel: BUYER only) |
 | `404 "Order not found"` | unknown order, another buyer's order, or an order awarded to another workshop. A WORKSHOP user without a profile → `404 "No workshop profile found for this user"` |
 | `409 "Cannot start an order that is COMPLETED"` | any other transition from the wrong status (status shown). Completing a `CONFIRMED` order → `409 "The order has not been started yet; it must be IN_PROGRESS to be completed"` |
+| `409 "The order has not passed quality inspection yet; it cannot be completed"` | complete with no inspection. Latest inspection not `PASSED` → `409 "The latest quality inspection is FAILED; a PASSED inspection is required to complete the order"` |
+| `409 "Cannot start this order: its job is MATCHED"` | the order and its job disagree (also on a repeat) |
 
 **`totalCompletedJobs`:** increased with a single atomic SQL update that **doesn't change the workshop's `updatedAt`**. `updatedAt` is the profile version that profile edits and invitations check, so completing an order never makes a parallel profile edit or invite fail with `409 "Workshop was modified"`. Matching reads the new count straight away.
 
 Awarding the same quote again after the order has moved on still returns that order (`200`, `created: false`) with its current status.
+
+**Locking for order sub-resources (I5):** milestone, inspection, payment and rating writes lock the job `FOR SHARE`, then the order `FOR UPDATE` (the same job → order order as the lifecycle). Writes on one order run one after another, and none of them can interleave with start/complete/cancel: whichever gets the job first finishes, and the other sees its result.
+
+---
+
+## Milestones ✅
+
+The awarded workshop plans the work as numbered milestones; the buyer approves each one.
+
+```
+PENDING --start (workshop)--> IN_PROGRESS --complete (workshop)--> COMPLETED --approve (buyer)--> APPROVED
+REWORK_REQUIRED (set by a REWORK_REQUIRED inspection) --start (workshop)--> IN_PROGRESS
+```
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `POST /api/orders/:orderId/milestones` | awarded WORKSHOP | Create a milestone (order `CONFIRMED` or `IN_PROGRESS`) |
+| ✅ `GET /api/orders/:orderId/milestones` | the order's BUYER / awarded WORKSHOP | All milestones, by `sequence` |
+| ✅ `PATCH /api/milestones/:milestoneId` | awarded WORKSHOP | Edit a `PENDING` milestone (order `CONFIRMED` or `IN_PROGRESS`) |
+| ✅ `POST /api/milestones/:milestoneId/start` | awarded WORKSHOP | `PENDING`/`REWORK_REQUIRED` → `IN_PROGRESS` (sets `startedAt` the first time) |
+| ✅ `POST /api/milestones/:milestoneId/complete` | awarded WORKSHOP | `IN_PROGRESS` → `COMPLETED` (sets `completedAt`) |
+| ✅ `POST /api/milestones/:milestoneId/approve` | the order's BUYER | `COMPLETED` → `APPROVED` |
+
+**Create body:** `{ "title": "Machining", "sequence": 1, "description"?: "…", "dueDate"?: "2027-01-15" }`. `title` trimmed, 1-200 characters; `sequence` an integer 1-1000; `description` ≤ 2000; `dueDate` ISO (a date-only value means the end of that day, UTC). Unknown fields → `400`. **Edit body:** any of these (at least one); `description` and `dueDate` may be `null`. Status is never set directly.
+
+**Rules**
+- `sequence` is unique per order → `409 "A milestone with sequence 1 already exists for this order"`.
+- A new or re-sequenced milestone must come after every milestone that has already started → `409 "sequence must be greater than 2, the last milestone that has already started"`.
+- **Sequential:** a milestone can start only when every lower-sequence milestone is `APPROVED` → `409 "Milestone 1 is COMPLETED; earlier milestones must be APPROVED before this one can start"`. So at most one milestone is active at a time.
+- Start, complete and approve need an `IN_PROGRESS` order → `409 "Milestones can only be started while the order is IN_PROGRESS (it is CONFIRMED)"`. Wrong milestone status → `409 "A PENDING milestone cannot be completed"`. Only `PENDING` milestones can be edited → `409`.
+- Milestones can't be created or edited on a `COMPLETED`/`CANCELLED` order → `409 "Milestones cannot be changed on an order that is COMPLETED"`.
+- **Repeats** (already in the target status) → `200` with `changed: false` (`"Milestone already started"`), nothing written.
+- Transitions take no body (any field → `400`).
+
+**Responses:** create `201 { milestone }`; list `200 { milestones }`; edit `200 { milestone }`; transitions `200 { changed, milestone }`.
+
+**Access:** wrong role → `403`; another buyer's order or another workshop's → `404 "Order not found"` / `404 "Milestone not found"`.
+
+---
+
+## Inspections / QC ✅
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `POST /api/orders/:orderId/inspections` | INSPECTOR | Record an inspection on an `IN_PROGRESS` order |
+| ✅ `GET /api/orders/:orderId/inspections` | BUYER / WORKSHOP / INSPECTOR / ADMIN (see access) | The order's inspection history, newest first |
+
+**Body:** `{ "status": "PASSED" | "FAILED" | "REWORK_REQUIRED", "findings"?: "…" }` (`findings` trimmed, 1-2000 characters). Unknown fields → `400`. The inspector is the caller; `inspectedAt` is set by the server, strictly after the order's previous inspection.
+
+**Response** `201`: `{ inspection: { id, orderId, inspectorId, status, findings, inspectedAt, inspector: { id, name } }, reworkMilestoneId }`.
+
+- **`REWORK_REQUIRED`** sends the order's active milestone (`IN_PROGRESS` or `COMPLETED`, highest sequence) back to `REWORK_REQUIRED`: `completedAt` is cleared and `notes` = the findings (or `"Rework requested after inspection"`). `reworkMilestoneId` is its id. With no such milestone → `409 "REWORK_REQUIRED needs an IN_PROGRESS or COMPLETED milestone to send back for rework"` and nothing is written. The workshop then restarts that milestone.
+- Only `IN_PROGRESS` orders can be inspected → `409 "Only IN_PROGRESS orders can be inspected (this order is CONFIRMED)"`.
+- **QC gate:** completing the order needs the **latest** inspection to be `PASSED` (see [Order lifecycle](#order-lifecycle)).
+
+**Access**
+- Create: INSPECTOR only (others `403`); unknown order → `404`. There is no inspector-assignment model, so any inspector can inspect any in-progress order whose id they have. No endpoint lists orders to inspectors.
+- History: the order's buyer and awarded workshop; an inspector **only for orders they have inspected**; ADMIN for any order (read-only oversight). Everyone else → `404 "Order not found"`.
+
+---
+
+## Payments (simulated) ✅
+
+> **Mock only.** There is no payment gateway. A payment is created `PENDING` and the buyer then *simulates* the gateway result. Only database state changes; no money moves. `transactionRef` is `"SIM-<paymentId>"` and every summary carries `"simulated": true`.
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `POST /api/orders/:orderId/payments` | the order's BUYER | Create a `PENDING` payment |
+| ✅ `POST /api/payments/:paymentId/simulate` | the order's BUYER | Simulate the result: `{ "outcome": "SUCCEEDED" \| "FAILED" }` |
+| ✅ `GET /api/orders/:orderId/payments` | the order's BUYER / awarded WORKSHOP | Payments, newest first, with a summary |
+
+**Create body:** `{ "amount": "5000.00", "description"?: "Advance" }`. `amount` is a number or decimal string, > 0, at most 2 decimals and 10 integer digits (same rules as quote prices); `description` ≤ 500. Unknown fields → `400`.
+
+**Summary** (in every response): `{ agreedPrice, paid, pending, remaining, simulated: true }`, money as 2-decimal strings; `remaining = agreedPrice − paid − pending`.
+
+**Rules**
+- **Cumulative limit:** `PENDING` (reserved) + `SUCCEEDED` + the new amount must not exceed `agreedPrice` (equal is allowed) → `409 "Payment of 500.26 exceeds the remaining payable amount of 500.25 (agreed 12500.50, paid 10000.00, pending 2000.25)"`. Exact decimal arithmetic, checked under the order lock, so parallel requests can't overshoot together. A `FAILED` payment releases its reservation.
+- New payments only on `CONFIRMED`/`IN_PROGRESS` orders → `409 "Cannot add a payment to an order that is COMPLETED"`.
+- Simulate: `PENDING` → `SUCCEEDED` (sets `paidAt`) or `FAILED`, once. The same outcome again → `200` `changed: false`; the other outcome → `409 "Only PENDING payments can be processed (this payment is FAILED)"`. On a `CANCELLED` order a pending payment can only be marked `FAILED` → otherwise `409`.
+
+**Responses:** create `201 { payment, summary }`; simulate `200 { changed, payment, summary }`; list `200 { payments, summary }`.
+
+**Access:** wrong role → `403`; another buyer's order → `404 "Order not found"`; another buyer's or unknown payment → `404 "Payment not found"`.
+
+---
+
+## Ratings ✅
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `POST /api/orders/:orderId/rating` | the order's BUYER | Rate a `COMPLETED` order, once |
+| ✅ `GET /api/workshops/:id/ratings` | any authenticated user | A workshop's rating history, newest first |
+
+**Body:** `{ "score": 1-5 (integer), "review"?: "…" }` (`review` trimmed, ≤ 2000). Unknown fields → `400`.
+
+**Response** `201`: `{ rating, workshop: { id, rating, ratingCount } }`.
+
+- Only `COMPLETED` orders → `409 "Only COMPLETED orders can be rated (this order is IN_PROGRESS)"`. A second rating → `409 "This order has already been rated"` (also under parallel submissions).
+- **Aggregate:** one atomic SQL update, `rating = (rating × ratingCount + score) / (ratingCount + 1)`, `ratingCount + 1`, so parallel ratings of the same workshop are all counted. It doesn't change the workshop's `updatedAt` (the profile version), like `totalCompletedJobs`. Seeded workshops start with seeded aggregates that have no individual rating rows, so `ratingCount` can be larger than the history length.
+- History `200`: `{ workshop: { id, businessName, rating, ratingCount }, ratings: [{ id, orderId, score, review, createdAt, buyer: { id, name } }] }`. Unknown workshop → `404`.

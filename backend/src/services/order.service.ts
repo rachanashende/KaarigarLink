@@ -22,7 +22,8 @@ import { Prisma, type InvitationStatus, type JobStatus, type OrderStatus, type Q
 import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
-import { getMyWorkshopId } from './workshop.service';
+import { participantScope } from './orderAccess';
+import { assertQualityCleared } from './inspection.service';
 import { effectiveInvitationStatus, expireOverdueInvitations } from './invitationExpiry';
 import { cancelSubmittedQuotes, QUOTABLE_JOB_STATUSES } from './quote.service';
 
@@ -179,13 +180,6 @@ async function awardInTransaction(
 
 // ---------- Buyer / workshop: read ----------
 
-/** Who may see an order: its buyer, or the awarded workshop's owner. Everyone else gets 404. */
-async function participantScope(user: AuthUser): Promise<Prisma.OrderWhereInput> {
-  if (user.role === 'BUYER') return { buyerId: user.id };
-  if (user.role === 'WORKSHOP') return { workshopId: await getMyWorkshopId(user) };
-  throw ApiError.forbidden();
-}
-
 export async function getOrderById(user: AuthUser, orderId: string) {
   const scope = await participantScope(user);
   const order = await prisma.order.findFirst({
@@ -284,6 +278,10 @@ async function transitionOrder(user: AuthUser, orderId: string, action: Lifecycl
       // Order and job always move together; a mismatch means something outside this flow changed the job.
       throw ApiError.conflict(`Cannot ${rule.verb} this order: its job is ${job.status}`);
     }
+
+    // I5 QC gate, read under the order lock: inspections and milestone writes take
+    // job FOR SHARE -> order FOR UPDATE, so none can commit between this check and the update.
+    if (action === 'complete') await assertQualityCleared(tx, found.id);
 
     const now = new Date();
     const { count } = await tx.order.updateMany({
