@@ -298,11 +298,11 @@ Owning buyer only. Send any subset of the create fields. `description`, `address
 | `DRAFT` | yes | `OPEN`, `CANCELLED` |
 | `OPEN` | yes | `DRAFT`, `CANCELLED` |
 | `MATCHED` (set when the buyer sends invitations, M8; viewing matches does not set it) | no | `CANCELLED` |
-| `AWARDED`, `IN_PROGRESS`, `COMPLETED` (Member 2) | no | n/a |
+| `AWARDED`, `IN_PROGRESS`, `COMPLETED` (set by the order: award, start, complete) | no | n/a |
 | `CANCELLED` | no | n/a |
 
 **Cancelling a job.** Send `PUT /api/jobs/:id` with `{ "status": "CANCELLED" }`. There is no DELETE.
-- Allowed from `DRAFT`, `OPEN` or `MATCHED`. Not allowed once `AWARDED` or later: that's order cancellation, which belongs to Member 2's module.
+- Allowed from `DRAFT`, `OPEN` or `MATCHED`. Not allowed once `AWARDED` or later: cancel the order instead (`POST /api/orders/:orderId/cancel`), which also cancels the job.
 - In the same transaction, every invitation for the job that is still `INVITED` or `ACCEPTED` becomes `EXPIRED`. `DECLINED` invitations are left as they are. Every `SUBMITTED` quote for the job becomes `CANCELLED`, and quotes in other statuses are left as they are (see [Quotations](#quotations-)).
 - Cancelling is final: a `CANCELLED` job can't be reopened or edited (`409`). The job stays in the buyer's list with `status: "CANCELLED"`.
 - Sending a job's current status again (e.g. `CANCELLED` on a cancelled job) changes nothing and returns `200`.
@@ -726,20 +726,25 @@ WORKSHOP only; quotes from the caller's own workshop, newest first. Each quote i
 
 ## Orders ✅
 
-The buyer awards **one** quote for a job. Awarding creates the job's **single order** in one transaction. Starting, completing and cancelling an order are **not available yet** (planned for I4b), so an order currently stays `CONFIRMED`. Milestones, inspections, payments and ratings are not exposed yet (I5).
+The buyer awards **one** quote for a job. Awarding creates the job's **single order** in one transaction. The awarded workshop then **starts** the order and the buyer **completes** or **cancels** it (see [Order lifecycle](#order-lifecycle)). Milestones, inspections, payments and ratings are not exposed yet (I5).
 
 | Method & path | Role | Purpose |
 |---|---|---|
 | ✅ `POST /api/orders/award/:quoteId` | owning BUYER | Award a quote and create the order |
 | ✅ `GET /api/orders/mine` | BUYER / WORKSHOP | My orders: as the buyer, or as the awarded workshop |
 | ✅ `GET /api/orders/:orderId` | the order's BUYER / awarded WORKSHOP | One order with its job, quote and workshop |
+| ✅ `POST /api/orders/:orderId/start` | awarded WORKSHOP | `CONFIRMED` → `IN_PROGRESS` |
+| ✅ `POST /api/orders/:orderId/complete` | the order's BUYER | `IN_PROGRESS` → `COMPLETED` |
+| ✅ `POST /api/orders/:orderId/cancel` | the order's BUYER | `CONFIRMED`/`IN_PROGRESS` → `CANCELLED` |
 
 **Money:** `agreedPrice` (and any nested `quote.totalPrice` or `payments[].amount`) is returned as an exact **2-decimal string**, e.g. `"12500.50"`. `currency` is `"INR"`.
 
-| OrderStatus | Meaning |
-|---|---|
-| `CONFIRMED` | Created by the award (the only status set in I4) |
-| `IN_PROGRESS` / `COMPLETED` / `CANCELLED` | Reserved for the I4b order transitions |
+| OrderStatus | Job status | Meaning |
+|---|---|---|
+| `CONFIRMED` | `AWARDED` | Created by the award |
+| `IN_PROGRESS` | `IN_PROGRESS` | The workshop started work |
+| `COMPLETED` | `COMPLETED` | The buyer confirmed completion (final) |
+| `CANCELLED` | `CANCELLED` | The buyer cancelled the order (final) |
 
 ### `POST /api/orders/award/:quoteId`
 BUYER only, for a quote on **their own** job. **No body:** everything comes from the quote, and any field → `400`.
@@ -802,3 +807,41 @@ BUYER: orders for my jobs. WORKSHOP: orders awarded to my workshop. Newest first
 
 ### `GET /api/orders/:orderId`
 Only the order's buyer and the awarded workshop can read it. Anyone else with those roles → `404 "Order not found"`; INSPECTOR / ADMIN → `403` (not part of I4). Returns `{ order }` with the full `job`, the `quote`, `workshop: { id, businessName, city }`, and `milestones`, `inspections` and `payments` (empty until I5).
+
+### Order lifecycle
+
+```
+CONFIRMED --start (workshop)--> IN_PROGRESS --complete (buyer)--> COMPLETED
+    \                              |
+     +-------cancel (buyer)---------+--> CANCELLED
+```
+
+The order and its job always change **together, in one transaction**. Each transition locks the job first, then the order. That's the same job-first order as quote writes, cancellation and award, so a transition and anything else touching the job run one after the other and can't deadlock. The order changes only if it is still in the expected status, so each transition can happen **once**.
+
+| Endpoint | Body | From | Effects |
+|---|---|---|---|
+| `POST /api/orders/:orderId/start` | none (any field → `400`) | `CONFIRMED` | Order and job → `IN_PROGRESS`. The workshop doesn't need to still be `VERIFIED` (checked at award) |
+| `POST /api/orders/:orderId/complete` | none (any field → `400`) | `IN_PROGRESS` | Order and job → `COMPLETED`; `actualCompletionDate` = now; the workshop's `totalCompletedJobs` + 1 (exactly once). Allowed after the job deadline. No inspection is required yet; a QC gate is planned for I5 |
+| `POST /api/orders/:orderId/cancel` | `{ "reason": "…" }` | `CONFIRMED`, `IN_PROGRESS` | Order and job → `CANCELLED`; `reason` stored as `cancellationReason`; the job's `INVITED`/`ACCEPTED` invitations → `EXPIRED` (the same rule as job cancellation; `DECLINED`/`EXPIRED` are kept). The accepted quote **stays `ACCEPTED`**, and rejected quotes stay `REJECTED` |
+
+`reason` is required: a string, trimmed, 3-1000 characters. Any other field → `400`.
+
+**Response** (all three): `200` with `{ changed, order }`. `order` has the same shape as the award response (`job`, `quote`, `workshop`, money as 2-decimal strings).
+```json
+{ "success": true, "message": "Order completed",
+  "data": { "changed": true, "order": { "id": "cm…", "status": "COMPLETED", "actualCompletionDate": "2026-11-22T10:00:00.000Z",
+    "agreedPrice": "12500.50", "job": { "status": "COMPLETED", "…": "…" }, "quote": { "status": "ACCEPTED", "…": "…" }, "…": "…" } } }
+```
+
+**Repeats:** if the order is already in the target status, the request returns `200` with `changed: false` and the current order, for example `"Order already completed"`. Nothing is written again: the completed count isn't increased twice, and the first cancellation reason is kept.
+
+| Error | When |
+|---|---|
+| `400 "Validation failed"` | a body field on start/complete; a missing, short, long or non-string `reason`; unknown fields |
+| `401` / `403` | no token / wrong role (start: WORKSHOP only; complete and cancel: BUYER only) |
+| `404 "Order not found"` | unknown order, another buyer's order, or an order awarded to another workshop. A WORKSHOP user without a profile → `404 "No workshop profile found for this user"` |
+| `409 "Cannot start an order that is COMPLETED"` | any other transition from the wrong status (status shown). Completing a `CONFIRMED` order → `409 "The order has not been started yet; it must be IN_PROGRESS to be completed"` |
+
+**`totalCompletedJobs`:** increased with a single atomic SQL update that **doesn't change the workshop's `updatedAt`**. `updatedAt` is the profile version that profile edits and invitations check, so completing an order never makes a parallel profile edit or invite fail with `409 "Workshop was modified"`. Matching reads the new count straight away.
+
+Awarding the same quote again after the order has moved on still returns that order (`200`, `created: false`) with its current status.

@@ -5,6 +5,8 @@ import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
 import {
   awardBodySchema,
+  cancelOrderBodySchema,
+  emptyBodySchema,
   quoteIdParamsSchema,
   orderIdParamsSchema,
 } from '../validators/order.validator';
@@ -25,6 +27,28 @@ router.get(
   '/mine',
   authorize('BUYER', 'WORKSHOP'),
   orderController.mine,
+);
+
+// I4b lifecycle. Ownership (awarded workshop / order's buyer) is checked in the service.
+router.post(
+  '/:orderId/start',
+  authorize('WORKSHOP'),
+  validate({ params: orderIdParamsSchema, body: emptyBodySchema }),
+  orderController.start,
+);
+
+router.post(
+  '/:orderId/complete',
+  authorize('BUYER'),
+  validate({ params: orderIdParamsSchema, body: emptyBodySchema }),
+  orderController.complete,
+);
+
+router.post(
+  '/:orderId/cancel',
+  authorize('BUYER'),
+  validate({ params: orderIdParamsSchema, body: cancelOrderBodySchema }),
+  orderController.cancel,
 );
 
 router.get(

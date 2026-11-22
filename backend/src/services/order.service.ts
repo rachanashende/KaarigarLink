@@ -18,13 +18,13 @@
  *   6. Other SUBMITTED quotes -> REJECTED, selected quote -> ACCEPTED, order created.
  * Any failure rolls the whole award back.
  */
-import { Prisma, type InvitationStatus, type JobStatus, type QuoteStatus } from '@prisma/client';
+import { Prisma, type InvitationStatus, type JobStatus, type OrderStatus, type QuoteStatus } from '@prisma/client';
 import type { AuthUser } from '../types/express';
 import { prisma } from '../utils/prisma';
 import { ApiError } from '../utils/ApiError';
 import { getMyWorkshopId } from './workshop.service';
 import { effectiveInvitationStatus, expireOverdueInvitations } from './invitationExpiry';
-import { QUOTABLE_JOB_STATUSES } from './quote.service';
+import { cancelSubmittedQuotes, QUOTABLE_JOB_STATUSES } from './quote.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -215,3 +215,116 @@ export async function listMyOrders(user: AuthUser) {
   });
   return orders.map(orderView);
 }
+
+// ---------- I4b: order lifecycle (start / complete / cancel) ----------
+//
+// Each transition is ONE transaction with the backend-wide job-first lock order:
+//   job FOR UPDATE -> order FOR UPDATE -> (cancel: invitations -> quotes) -> (complete: workshop)
+// The order row is changed with a conditional update on its expected status, so a
+// transition can only ever happen once. A repeated request finds the order already
+// in the target status and returns it unchanged ({ changed: false }) with no side effects.
+
+type LifecycleAction = 'start' | 'complete' | 'cancel';
+
+const LIFECYCLE: Record<
+  LifecycleAction,
+  { role: 'BUYER' | 'WORKSHOP'; from: OrderStatus[]; to: OrderStatus; jobFrom: JobStatus[]; jobTo: JobStatus; verb: string }
+> = {
+  start: { role: 'WORKSHOP', from: ['CONFIRMED'], to: 'IN_PROGRESS', jobFrom: ['AWARDED'], jobTo: 'IN_PROGRESS', verb: 'start' },
+  complete: { role: 'BUYER', from: ['IN_PROGRESS'], to: 'COMPLETED', jobFrom: ['IN_PROGRESS'], jobTo: 'COMPLETED', verb: 'complete' },
+  cancel: {
+    role: 'BUYER',
+    from: ['CONFIRMED', 'IN_PROGRESS'],
+    to: 'CANCELLED',
+    jobFrom: ['AWARDED', 'IN_PROGRESS'],
+    jobTo: 'CANCELLED',
+    verb: 'cancel',
+  },
+};
+
+const later = (previous: Date) => new Date(Math.max(Date.now(), previous.getTime() + 1));
+
+async function transitionOrder(user: AuthUser, orderId: string, action: LifecycleAction, reason?: string) {
+  const rule = LIFECYCLE[action];
+  // Routes already restrict the role; this keeps the service safe on its own.
+  if (user.role !== rule.role) throw ApiError.forbidden();
+  const scope = await participantScope(user);
+  const found = await prisma.order.findFirst({
+    where: { AND: [{ id: orderId }, scope] },
+    select: { id: true, jobId: true, workshopId: true },
+  });
+  if (!found) throw orderNotFound();
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Job first, as everywhere else.
+    const jobs = await tx.$queryRaw<{ status: JobStatus; updatedAt: Date }[]>`
+      SELECT "status", "updatedAt" FROM "Job" WHERE "id" = ${found.jobId} FOR UPDATE`;
+    const job = jobs[0];
+    // 2. Then the order.
+    const orders = await tx.$queryRaw<{ status: OrderStatus; updatedAt: Date }[]>`
+      SELECT "status", "updatedAt" FROM "Order" WHERE "id" = ${found.id} FOR UPDATE`;
+    const order = orders[0];
+    if (!job || !order) throw orderNotFound();
+
+    // Repeat request: already in the target status -> unchanged, no side effects.
+    // The job must agree, otherwise the "already done" answer would hide an inconsistency.
+    if (order.status === rule.to) {
+      if (job.status !== rule.jobTo) {
+        throw ApiError.conflict(`Cannot ${rule.verb} this order: its job is ${job.status}`);
+      }
+      return { changed: false, order: orderView(await tx.order.findUniqueOrThrow({ where: { id: found.id }, include: awardInclude })) };
+    }
+    if (!rule.from.includes(order.status)) {
+      if (action === 'complete' && order.status === 'CONFIRMED') {
+        throw ApiError.conflict('The order has not been started yet; it must be IN_PROGRESS to be completed');
+      }
+      throw ApiError.conflict(`Cannot ${rule.verb} an order that is ${order.status}`);
+    }
+    if (!rule.jobFrom.includes(job.status)) {
+      // Order and job always move together; a mismatch means something outside this flow changed the job.
+      throw ApiError.conflict(`Cannot ${rule.verb} this order: its job is ${job.status}`);
+    }
+
+    const now = new Date();
+    const { count } = await tx.order.updateMany({
+      where: { id: found.id, status: order.status },
+      data: {
+        status: rule.to,
+        updatedAt: later(order.updatedAt),
+        ...(action === 'complete' && { actualCompletionDate: now }),
+        ...(action === 'cancel' && { cancellationReason: reason }),
+      },
+    });
+    if (count !== 1) throw ApiError.conflict('Order was modified, please retry');
+
+    await tx.job.update({ where: { id: found.jobId }, data: { status: rule.jobTo, updatedAt: later(job.updatedAt) } });
+
+    if (action === 'cancel') {
+      // Same rule as cancelling a job (M5/I3): INVITED and ACCEPTED invitations expire,
+      // DECLINED/EXPIRED stay. The accepted quote stays ACCEPTED (only SUBMITTED quotes,
+      // of which none remain after an award, would be cancelled).
+      await tx.jobInvitation.updateMany({
+        where: { jobId: found.jobId, status: { in: ['INVITED', 'ACCEPTED'] } },
+        data: { status: 'EXPIRED' },
+      });
+      await cancelSubmittedQuotes(found.jobId, tx);
+    }
+
+    if (action === 'complete') {
+      // Exactly once: this line only runs in the transaction whose conditional update
+      // moved the order IN_PROGRESS -> COMPLETED. Raw SQL so Workshop.updatedAt (the
+      // profile version used by profile edits and invites) is NOT changed.
+      const incremented = await tx.$executeRaw`
+        UPDATE "Workshop" SET "totalCompletedJobs" = "totalCompletedJobs" + 1 WHERE "id" = ${found.workshopId}`;
+      if (incremented !== 1) throw ApiError.conflict('Workshop not found for this order');
+    }
+
+    const updated = await tx.order.findUniqueOrThrow({ where: { id: found.id }, include: awardInclude });
+    return { changed: true, order: orderView(updated) };
+  });
+}
+
+export const startOrder = (user: AuthUser, orderId: string) => transitionOrder(user, orderId, 'start');
+export const completeOrder = (user: AuthUser, orderId: string) => transitionOrder(user, orderId, 'complete');
+export const cancelOrder = (user: AuthUser, orderId: string, reason: string) =>
+  transitionOrder(user, orderId, 'cancel', reason);

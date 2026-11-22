@@ -25,3 +25,24 @@ export async function mine(req: Request, res: Response) {
   const orders = await orderService.listMyOrders(req.user!);
   sendSuccess(res, { orders }, 'Your orders fetched');
 }
+
+type Transition = { changed: boolean; order: unknown };
+
+function sendTransition(res: Response, result: Transition, done: string, already: string) {
+  sendSuccess(res, result, result.changed ? done : already);
+}
+
+export async function start(req: Request, res: Response) {
+  const result = await orderService.startOrder(req.user!, req.params.orderId as string);
+  sendTransition(res, result, 'Order started', 'Order already started');
+}
+
+export async function complete(req: Request, res: Response) {
+  const result = await orderService.completeOrder(req.user!, req.params.orderId as string);
+  sendTransition(res, result, 'Order completed', 'Order already completed');
+}
+
+export async function cancel(req: Request, res: Response) {
+  const result = await orderService.cancelOrder(req.user!, req.params.orderId as string, req.body.reason);
+  sendTransition(res, result, 'Order cancelled', 'Order already cancelled');
+}
