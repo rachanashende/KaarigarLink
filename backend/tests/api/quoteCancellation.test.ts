@@ -4,7 +4,6 @@ import type { Prisma } from '@prisma/client';
 import { app } from '../../src/app';
 import { prisma } from '../helpers/db';
 import { seededSession } from '../helpers/seedSession';
-import { awardQuote } from '../../src/services/order.service';
 
 /**
  * I3: cancelling a job cancels its SUBMITTED quotes in the same transaction
@@ -163,10 +162,12 @@ describe('a cancelled quote is final', () => {
     expect((await prisma.quote.findUniqueOrThrow({ where: { id: quote.id } })).totalPrice.toFixed(2)).toBe('12500.50');
   });
 
-  it('cannot be awarded (current award service), and no order is created', async () => {
+  it('cannot be awarded (409), and no order is created', async () => {
     const quote = await submittedQuote(PRECISION);
     await cancelJob();
-    await expect(awardQuote(ASHA, quote.id)).rejects.toMatchObject({ name: 'ApiError' });
+    const res = await request(app).post(`/api/orders/award/${quote.id}`).set(auth(await tokenFor(ASHA)));
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('This job cannot be awarded (status CANCELLED)');
     expect(await prisma.order.count()).toBe(0);
     expect(await quoteStatus(quote.id)).toBe('CANCELLED');
   });

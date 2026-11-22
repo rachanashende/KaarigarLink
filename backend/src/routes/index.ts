@@ -5,6 +5,7 @@ import jobRoutes from './job.routes';
 import invitationRoutes from './invitation.routes';
 import { health } from '../controllers/health.controller';
 import quoteRoutes from './quote.routes';
+import orderRoutes from './order.routes';
 
 /**
  * Central router mounted at /api.
@@ -18,5 +19,6 @@ router.use('/workshops', workshopRoutes);
 router.use('/jobs', jobRoutes);
 router.use('/invitations', invitationRoutes);
 router.use('/quotes', quoteRoutes);
+router.use('/orders', orderRoutes);
 
 export default router;

@@ -632,7 +632,7 @@ The status check and the write happen in **one conditional update**, so simultan
 
 ## Quotations ✅
 
-A workshop quotes on a job through **its own invitation**, and **only after accepting it**. Quote submission and editing are live. Awarding a quote and creating an order are not part of this API yet.
+A workshop quotes on a job through **its own invitation**, and **only after accepting it**. Quote submission and editing are live. The buyer awards a quote through [Orders](#orders-).
 
 | Method & path | Role | Purpose |
 |---|---|---|
@@ -663,7 +663,7 @@ A quote can be submitted or edited only while **all** of these hold:
 | Status | Set by | Meaning |
 |---|---|---|
 | `SUBMITTED` | the workshop submitting | Live offer; the workshop can still edit it |
-| `ACCEPTED` | the buyer's award (order workflow, not part of this API yet) | The chosen quote |
+| `ACCEPTED` | the buyer's award (`POST /api/orders/award/:quoteId`) | The chosen quote; its order exists |
 | `REJECTED` | the same award | Another quote for the job was chosen |
 | `WITHDRAWN` | reserved: no endpoint sets it yet | The workshop withdrew its quote |
 | `CANCELLED` | the system, when the buyer cancels the job | The job was cancelled. Neither the workshop nor the buyer judged the quote |
@@ -721,3 +721,84 @@ Owning BUYER only (another buyer's job → `404 "Job not found"`; other roles �
 
 ### `GET /api/quotes/mine`
 WORKSHOP only; quotes from the caller's own workshop, newest first. Each quote includes `job: { id, title, status, deadline }`.
+
+---
+
+## Orders ✅
+
+The buyer awards **one** quote for a job. Awarding creates the job's **single order** in one transaction. Starting, completing and cancelling an order are **not available yet** (planned for I4b), so an order currently stays `CONFIRMED`. Milestones, inspections, payments and ratings are not exposed yet (I5).
+
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `POST /api/orders/award/:quoteId` | owning BUYER | Award a quote and create the order |
+| ✅ `GET /api/orders/mine` | BUYER / WORKSHOP | My orders: as the buyer, or as the awarded workshop |
+| ✅ `GET /api/orders/:orderId` | the order's BUYER / awarded WORKSHOP | One order with its job, quote and workshop |
+
+**Money:** `agreedPrice` (and any nested `quote.totalPrice` or `payments[].amount`) is returned as an exact **2-decimal string**, e.g. `"12500.50"`. `currency` is `"INR"`.
+
+| OrderStatus | Meaning |
+|---|---|
+| `CONFIRMED` | Created by the award (the only status set in I4) |
+| `IN_PROGRESS` / `COMPLETED` / `CANCELLED` | Reserved for the I4b order transitions |
+
+### `POST /api/orders/award/:quoteId`
+BUYER only, for a quote on **their own** job. **No body:** everything comes from the quote, and any field → `400`.
+
+Award is allowed only while **all** of these hold. Otherwise it returns `409` and nothing changes:
+
+| Rule | `409` message |
+|---|---|
+| No order exists yet for the job | `"This job has already been awarded to another quote"` (see repeats below) |
+| The job is `OPEN` or `MATCHED` | `"This job cannot be awarded (status CANCELLED)"` (actual status shown) |
+| The job deadline has not passed | `"The job deadline has passed; it can no longer be awarded"` |
+| The quote's workshop invitation is `ACCEPTED` | `"The workshop has not accepted this job's invitation"` / `"…declined this job's invitation"` / `"…invitation for this job has expired"` |
+| The quote is `SUBMITTED` | `"Only SUBMITTED quotes can be awarded (this quote is REJECTED)"` |
+| The quote's `validUntil` (if set) has not passed | `"This quote is no longer valid (validUntil has passed)"` |
+| The workshop is still `VERIFIED` | `"The workshop is no longer verified; this quote cannot be awarded"` |
+
+**Effects, all in one transaction:**
+
+| Record | Change |
+|---|---|
+| Job | → `AWARDED` |
+| Selected quote | → `ACCEPTED` |
+| Other `SUBMITTED` quotes for the job | → `REJECTED` |
+| `INVITED` invitations for the job | → `EXPIRED` (the M8 rule: the job left `OPEN`/`MATCHED`) |
+| `ACCEPTED` invitations, including other workshops' | **kept `ACCEPTED`**. Award never marks an invitation `DECLINED`; only a workshop declines |
+| Order | created: `status: CONFIRMED`, `agreedPrice` = the quote's `totalPrice`, `expectedCompletionDate` = now + `estimatedDays` |
+
+`201 "Quote awarded and order created"`:
+```json
+{ "success": true, "message": "Quote awarded and order created",
+  "data": { "created": true, "order": {
+    "id": "cm…", "jobId": "seed-job-alu-brackets", "quoteId": "cm…", "buyerId": "seed-user-buyer-asha",
+    "workshopId": "seed-ws-precision-works", "agreedPrice": "12500.50", "currency": "INR", "status": "CONFIRMED",
+    "expectedCompletionDate": "2026-12-06T10:00:00.000Z", "actualCompletionDate": null, "cancellationReason": null,
+    "createdAt": "…", "updatedAt": "…",
+    "quote": { "id": "cm…", "totalPrice": "12500.50", "status": "ACCEPTED", "…": "…" },
+    "job": { "id": "seed-job-alu-brackets", "status": "AWARDED", "…": "…" },
+    "workshop": { "id": "seed-ws-precision-works", "businessName": "Precision Works" } } } }
+```
+
+**Repeats:**
+- The **same buyer awarding the same quote again** gets `200 "Quote already awarded; existing order returned"`, with `created: false` and the **same order**. No second order is ever created, even for simultaneous requests.
+- Awarding a **different** quote on an awarded job → `409 "This job has already been awarded to another quote"`.
+- The database also allows only one order per job and per quote.
+
+| Error | When |
+|---|---|
+| `400 "Validation failed"` | any request body field |
+| `401` / `403` | no token / not a BUYER |
+| `404 "Quote not found"` | unknown quote, or a quote on another buyer's job (their orders are never revealed) |
+| `409` | an eligibility rule above |
+
+**Concurrency:** the award locks the job first (`FOR UPDATE`), then the invitations, then the quotes, then creates the order. That's the same job-first order as quote writes and job cancellation. As a result:
+- A quote edit or submission in progress finishes first, and the award uses the **latest committed price**.
+- An edit, submission or cancellation that arrives during an award waits, then gets `409`.
+- Two awards for one job run one after the other: the second sees the order and gets `200` (same quote) or `409` (different quote).
+
+### `GET /api/orders/mine`
+BUYER: orders for my jobs. WORKSHOP: orders awarded to my workshop. Newest first. Each order includes `job: { id, title, status, deadline }` and `workshop: { id, businessName, city }`. Other roles → `403`. A WORKSHOP user without a profile → `404 "No workshop profile found for this user"`.
+
+### `GET /api/orders/:orderId`
+Only the order's buyer and the awarded workshop can read it. Anyone else with those roles → `404 "Order not found"`; INSPECTOR / ADMIN → `403` (not part of I4). Returns `{ order }` with the full `job`, the `quote`, `workshop: { id, businessName, city }`, and `milestones`, `inspections` and `payments` (empty until I5).
