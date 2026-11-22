@@ -32,7 +32,7 @@ function RecordLink({ to, children }: { to: string; children: ReactNode }) {
   return <Link className="inline-flex min-h-11 items-center break-words font-medium text-primary underline-offset-4 hover:underline" to={to}>{children}</Link>;
 }
 function Facts({ rows }: { rows: [string, ReactNode][] }) {
-  return <dl className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-2 sm:p-6">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-2 break-words text-sm font-medium">{value}</dd></div>)}</dl>;
+  return <dl className="role-facts grid gap-5 border bg-card sm:grid-cols-2">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-2 break-words text-sm font-medium">{value}</dd></div>)}</dl>;
 }
 function JobDetails({ job }: { job: WorkshopJob }) {
   return <><Facts rows={[
@@ -47,7 +47,7 @@ function Quotes({ rows }: { rows: WorkshopQuotationData[] }) {
   const live = !useServices().demo;
   return <DataTable caption="Workshop quotation history" rows={rows} rowKey={row => row.quote.id} emptyTitle="No quotations recorded" emptyDescription="No canonical quotations are assigned to this workshop." columns={[
     { key: 'id', header: 'Quote', cell: row => row.quote.id },
-    { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-44"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
+    { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-44"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.job.capability}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
     { key: 'price', header: 'Quoted total', cell: row => <span className="whitespace-nowrap">{moneyLabel(row.quote.amount)}</span> },
     { key: 'date', header: 'Estimated delivery', cell: row => <span className="whitespace-nowrap">{dateLabel(row.quote.estimatedDelivery)}</span> },
     { key: 'status', header: 'Quotation status', cell: row => <State value={row.quote.status} /> },
@@ -58,7 +58,7 @@ function Quotes({ rows }: { rows: WorkshopQuotationData[] }) {
 function Invitations({ rows }: { rows: WorkshopInvitationData[] }) {
   return <DataTable caption="Workshop invitations" rows={rows} rowKey={row => row.invitation.id} emptyTitle="No invitations recorded" emptyDescription="No canonical invitations match this view for your workshop." columns={[
     { key: 'id', header: 'Invitation', cell: row => <RecordLink to={'/workshop/invitations/' + row.invitation.id}>{row.invitation.id}</RecordLink> },
-    { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-48"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
+    { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-48"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.job.capability}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
     { key: 'quantity', header: 'Quantity', cell: row => <span className="whitespace-nowrap">{quantityLabel(row.job)}</span> },
     { key: 'date', header: 'Job deadline', cell: row => <span className="whitespace-nowrap">{dateLabel(row.job.deadline)}</span> },
     { key: 'status', header: 'Invitation status', cell: row => <State value={row.invitation.status} /> },
@@ -68,7 +68,7 @@ function Invitations({ rows }: { rows: WorkshopInvitationData[] }) {
 function Orders({ rows }: { rows: WorkshopOrderData[] }) {
   return <DataTable caption="Workshop orders" rows={rows} rowKey={row => row.order.id} emptyTitle="No assigned orders" emptyDescription="No canonical orders match this view for your workshop." columns={[
     { key: 'id', header: 'Order', cell: row => <RecordLink to={'/workshop/orders/' + row.order.id}>{row.order.id}</RecordLink> },
-    { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-48"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
+    { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-48"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.job.capability}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
     { key: 'state', header: 'Order lifecycle', cell: row => <State value={row.order.status} /> },
     { key: 'qc', header: 'QC summary', cell: row => <State value={row.order.qcStatus} /> },
     { key: 'progress', header: 'Milestone progress', cell: row => <OrderProgress milestones={row.order.milestones} /> },
@@ -156,11 +156,23 @@ export function WorkshopRecords({ data, section, invitationId, orderId }: { data
       ['Active orders', data.summary.activeOrders], ['Pending inspections', data.summary.pendingInspections],
       ['Open rework requests', data.summary.openRework], ['Closed orders', data.summary.closedOrders],
     ].map(([label, value]) => <StatCard key={String(label)} label={String(label)} value={value} />)}</div>
-    <h2 className="text-lg font-semibold">Invitations</h2><Invitations rows={data.invitations.slice(0, 3)} />
+    <div className="role-task-grid">
+      <section aria-label="Workshop opportunity actions" className="role-task-panel"><h2>Opportunities to respond to</h2><p>Only invitations with an authorized response or quote action appear here. Responses do not create orders.</p>
+        {opportunities.length ? opportunities.map(row => <div key={row.invitation.id} className="role-task-row"><div><RecordLink to={'/workshop/invitations/' + row.invitation.id}>{row.job.title}</RecordLink><p>{row.buyer.name} / {quantityLabel(row.job)} / {dateLabel(row.job.deadline)}</p></div><State value={row.actions.respond ? 'RESPONSE_AVAILABLE' : 'READY_TO_QUOTE'} /></div>) : <p>No invitation response or new quotation is currently required. Review submitted quotation history from Invitations.</p>}
+      </section>
+      <section aria-label="Workshop quality attention" className="role-task-panel"><h2>Quality and rework attention</h2><p>Assigned orders with pending or rework inspection records. Inspector decisions remain read-only.</p>
+        {attention.length ? attention.map(row => <div key={row.order.id} className="role-task-row"><div><RecordLink to={'/workshop/orders/' + row.order.id}>{row.job.title}</RecordLink><p>{row.order.id}</p></div><State value={row.order.qcStatus} /></div>) : <p>No assigned order has an open inspection or rework record.</p>}
+      </section>
+    </div>
+    <h2 className="text-lg font-semibold">Recent invitations</h2><Invitations rows={data.invitations.slice(0, 3)} />
     <h2 className="text-lg font-semibold">Assigned orders</h2><Orders rows={data.orders.slice(0, 3)} />
+    <section aria-label="Recent workshop QC activity" className="role-task-panel"><h2>Recent submitted inspection activity</h2><p>Recorded inspector outcomes on your orders, ordered by submission date. Invitation and quote timestamps are not supplied.</p>
+      {activity.length ? activity.map(({ orderId, record }) => <div key={record.id} className="role-task-row"><div><RecordLink to={'/workshop/orders/' + orderId}>{orderId}</RecordLink><p>{record.findings.summary}</p></div><p>{record.decision} / {dateLabel(record.submittedAt)}</p></div>) : <p>No submitted inspection history on your assigned orders.</p>}
+    </section>
   </div>;
+  }
   const term = search.trim().toLowerCase();
-  const controls = <div className="flex flex-wrap gap-4">
+  const controls = <div role="search" aria-label={'Filter workshop ' + section} className="flex flex-wrap gap-4 border-y">
     <label className="min-w-0 basis-full text-sm sm:flex-1">Search {section}<input className={controlClass + ' mt-2'} value={search} onChange={event => setSearch(event.target.value)} /></label>
     <label className="min-w-0 basis-full text-sm sm:basis-auto">Record status<select className={controlClass + ' mt-2'} value={status} onChange={event => setStatus(event.target.value)}><option value="all">All statuses</option>{[...new Set(section === 'invitations' ? data.invitations.map(item => item.invitation.status) : data.orders.map(item => item.order.status))].map(value => <option key={value} value={value}>{value.replaceAll('_', ' ')}</option>)}</select></label>
   </div>;

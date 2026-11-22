@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from 'react-router';
 import { Plus } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState } from '@/components/feedback';
 import { useBuyerJobs } from './queries';
@@ -13,6 +13,7 @@ import { jobControlClass } from './JobField';
 export function JobsListPage() {
   const live = !useServices().demo;
   const query = useBuyerJobs();
+  const overview = useBuyerDashboard();
   const [params, setParams] = useSearchParams();
   const search = params.get('q') ?? '';
   const requestedStatus = params.get('status') ?? 'all';

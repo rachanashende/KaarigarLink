@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router';
 import { workshopNavigation, type WorkshopSection } from '@/app/roles';
-import { PageHeader } from '@/components/PageHeader';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ErrorState, LoadingState } from '@/components/feedback';
 import { useServices } from '@/app/services';
 import { useWorkshopWorkspace } from './queries';
@@ -16,7 +16,7 @@ const sections: Record<WorkshopSection, { title: string; description: string; ac
   },
   invitations: {
     title: 'Invitations',
-    description: 'Read invitations and quotations addressed to your canonical workshop. Invitation responses and quotation changes are local mock simulations only; order creation still requires buyer award.',
+    description: 'Read invitations and quotations addressed to your workshop. Invitation responses and quotation changes are local mock simulations only; order creation still requires buyer award.',
     actions: [],
   },
   orders: {
@@ -26,7 +26,7 @@ const sections: Record<WorkshopSection, { title: string; description: string; ac
   },
   profile: {
     title: 'Workshop profile',
-    description: 'Read your linked workshop profile, machinery and published capacity. Profile editing remains disabled.',
+    description: 'Review your workshop profile, machinery and published capacity. Profile editing remains disabled.',
     actions: ['Edit profile'],
   },
   settings: {
@@ -70,9 +70,13 @@ export function WorkshopPage({ section = 'dashboard' }: { section?: WorkshopSect
         <legend className="mb-3 text-sm font-medium">Unavailable actions</legend>
         <div className="flex flex-wrap gap-3">{actions.map(action => <Button key={action} disabled variant="outline">{action}</Button>)}</div>
       </fieldset>}
-    </section>
+    </section>;
+  return <div className="space-y-6" data-workshop-workspace>
+    <WorkspaceHeader label="Workshop / Manufacturing operations" title={detail ? (section === 'invitations' ? 'Invitation details' : 'Order details') : page.title} description={page.description} />
+    {section !== 'dashboard' && availability}
     {services.demo?.warning && <p role="alert" className="rounded-lg border border-destructive/30 bg-card p-5 text-sm">{services.demo.warning} Use the shared demo reset on the Buyer, Inspector or Admin workspace; it restores the same data for all roles.</p>}
     {workspace.isPending ? <LoadingState label="Loading shared workshop records..." /> : workspace.isError ? <ErrorState message={workspace.error.message} onRetry={() => { void workspace.refetch(); }} /> : workspace.data && <WorkshopRecords key={[user?.id, section, invitationId, orderId].join('/')} data={workspace.data} section={section} {...(invitationId === undefined ? {} : { invitationId })} {...(orderId === undefined ? {} : { orderId })} />}
+    {section === 'dashboard' && availability}
     <nav aria-label="Workshop pages" className="flex flex-wrap gap-3">
       {section !== 'dashboard' && <Button asChild variant="outline"><Link to="/workshop/dashboard">Workshop overview</Link></Button>}
       {workshopNavigation.filter(item => item.section !== section).map(item => <Button key={item.path} asChild variant="outline"><Link to={item.path}>{item.label}</Link></Button>)}

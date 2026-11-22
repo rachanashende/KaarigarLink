@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { StatCard } from '@/components/StatCard';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingState } from '@/components/feedback';
@@ -11,13 +11,14 @@ import { OperationalAlerts } from './OperationalAlerts';
 
 export function AdminDashboard() {
   const query = useAdminOverview();
-  const header = <PageHeader title="Admin workspace" description="A shared operational view of manufacturing demand, workshop activity and quality follow-up." action={<Button variant="outline" onClick={() => { void query.refetch(); }}>Refresh data</Button>} />;
+  const header = <WorkspaceHeader label="Admin / Platform operations" title="Admin workspace" description="A shared operational view of manufacturing demand, workshop activity and quality follow-up." action={<Button variant="outline" onClick={() => { void query.refetch(); }}>Refresh data</Button>} />;
   if (query.isPending) return <>{header}<LoadingState label="Loading platform operations…" /></>;
   if (query.isError) return <>{header}<ErrorState message={query.error.message} onRetry={() => { void query.refetch(); }} /></>;
   const data = query.data; const counts = metrics(data); const alerts = operationalAlerts(data);
   const activity = [...data.activity].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 6);
   const needsAttention = data.workshops.filter(workshop => alerts.some(alert => alert.workshopId === workshop.id));
-  return <>{header}<DemoDataNotice />
+  return <>{header}<p className="role-intro">A clear view of<br /><em>manufacturing operations.</em></p><DemoDataNotice />
+    <aside aria-label="Administrative authority" className="role-boundary mb-6 text-sm">Read-only platform oversight. Inspectors own QC decisions; workshops own their invitations and quotations. No moderation, award, production or payment command is available here.</aside>
     <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       {[['Total registered users', counts.users, 'All demo roles'], ['Total buyers', counts.buyers, 'Registered buyer accounts'], ['Total workshops', counts.workshops, 'Published workshop profiles'], ['Active manufacturing jobs', counts.jobs, 'Posted, quoting or awarded'], ['Active orders', counts.orders, 'Excludes closed and cancelled'], ['Pending inspections', counts.pending, 'Awaiting inspector decisions'], ['Open rework cases', counts.rework, 'Current rework inspection records']].map(([label, value, detail]) => <StatCard key={String(label)} label={String(label)} value={value!} detail={String(detail)} />)}
     </div>

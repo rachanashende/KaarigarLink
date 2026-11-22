@@ -25,7 +25,7 @@ export function Dialog({ open, onOpenChange, title, description, children, class
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }}
-    className={cn('m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border bg-card p-6 text-foreground shadow-xl backdrop:bg-foreground/40', className)}>
+    className={cn('kl-dialog m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-lg border bg-card p-6 text-foreground shadow-[0_20px_60px_rgba(13,15,20,0.12)]', className)}>
     <h2 id={id} className="text-lg font-semibold">{title}</h2>
     {description && <p id={id + '-description'} className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>}
     {children}

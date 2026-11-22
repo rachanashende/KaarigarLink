@@ -46,9 +46,9 @@ export function LoginPage() {
   }
   return <main id="main" tabIndex={-1} className="grid min-h-dvh lg:grid-cols-[1fr_1.05fr]">
     <section className="flex flex-col justify-between bg-primary px-6 py-6 text-primary-foreground sm:px-12 lg:p-14">
-      <Link to="/login" aria-label="KaarigarLink home" className="flex min-h-11 w-fit items-center gap-3 text-xl font-semibold"><Factory aria-hidden="true" className="size-7" />KaarigarLink</Link>
+      <Link to="/" aria-label="KaarigarLink home" className="flex min-h-11 w-fit items-center gap-3 text-xl font-semibold"><Factory aria-hidden="true" className="size-7" />KaarigarLink</Link>
       <div className="hidden max-w-lg py-10 lg:block lg:py-20">
-        <p className="mb-5 flex items-center gap-2 text-sm"><span className="size-2 bg-accent" />Manufacturing, connected</p>
+        <p className="mb-5 flex items-center gap-2 text-sm"><span className="size-2 bg-primary-foreground" />Manufacturing, connected</p>
         <p className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl lg:text-5xl">Good work starts with the right connection.</p>
         <p className="mt-6 max-w-md text-base leading-relaxed">A shared workspace for buyers, manufacturing workshops and independent quality teams.</p>
         <div className="mt-10 hidden border-t border-primary-foreground/25 pt-6 lg:block">

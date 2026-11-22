@@ -1,8 +1,9 @@
+import { JobRequirementSummary } from './JobRequirementSummary';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import type { BuyerQuotesData } from '@/services/marketplace';
 import type { Workshop } from '@/types';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -14,7 +15,7 @@ import { JobWorkspaceNav } from './JobWorkspaceNav';
 import { WorkshopDetails } from './WorkshopDetails';
 import { QuoteDetailsDialog, AwardReviewDialog } from './QuoteDialogs';
 import { dateLabel, moneyLabel } from './model';
-import { sortQuotes, quoteLabels, type QuoteSort } from './quoteModel';
+import { quoteRange, sortQuotes, quoteLabels, type QuoteSort } from './quoteModel';
 import { jobControlClass } from './JobField';
 import { placeLabel } from '@/components/utils';
 
@@ -33,7 +34,9 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const rows = sortQuotes(data.quotations, sort);
+  const range = quoteRange(rows);
   const selected = data.quotations.filter(entry => selection.includes(entry.quote.id));
+  const selectedRange = quoteRange(selected);
   const details = data.quotations.find(entry => entry.quote.id === detailsId) ?? null;
   const review = data.quotations.find(entry => entry.quote.id === reviewId) ?? null;
   return <>
@@ -61,7 +64,7 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
         { key: 'notes', header: 'Notes', cell: entry => <p className="min-w-44 max-w-60 text-xs leading-relaxed text-muted-foreground">{entry.quote.notes || 'No notes provided.'}</p> },
         { key: 'actions', header: 'Actions', cell: entry => <div className="min-w-40 space-y-2"><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setDetailsId(entry.quote.id)}>View quote</Button><Button disabled={!entry.canReviewAward} aria-describedby={!entry.canReviewAward ? 'review-reason-' + entry.quote.id : undefined} onClick={() => setReviewId(entry.quote.id)}>Review award</Button></div>{!entry.canReviewAward && <p id={'review-reason-' + entry.quote.id} className="text-xs leading-relaxed text-muted-foreground">{entry.reviewReason}</p>}</div> },
       ]} />
-      {selected.length > 0 && <section id="quote-comparison" tabIndex={-1} aria-labelledby="comparison-heading" className="mt-8 scroll-mt-6">
+      {selected.length > 0 && <section id="quote-comparison" tabIndex={-1} aria-labelledby="comparison-heading" className="buyer-comparison mt-8 scroll-mt-6">
         <h2 id="comparison-heading" className="mb-5 text-xl font-semibold">Selected quotation comparison</h2>
         <div className={selected.length === 1 ? 'grid max-w-xl gap-4' : selected.length === 2 ? 'grid items-stretch gap-4 md:grid-cols-2' : 'grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3'}>{selected.map(entry => <article key={entry.quote.id} aria-label={'Compare ' + entry.workshop.name} className="min-w-0 rounded-lg border bg-card p-5">
           <h3 className="text-lg font-semibold">{entry.workshop.name}</h3><p className="mt-2 text-xs text-muted-foreground">{placeLabel(entry.workshop.location)}</p>

@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router';
-import { PageHeader } from '@/components/PageHeader';
+import { BuyerHeader as PageHeader } from './BuyerHeader';
 import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/feedback';
 import { StatusBadge } from '@/components/StatusBadge';

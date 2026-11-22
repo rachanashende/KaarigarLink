@@ -8,6 +8,7 @@ import { RegisterPage } from '@/features/auth/RegisterPage';
 import { LoadingState, UnauthorizedState } from '@/components/feedback';
 import { Button } from '@/components/ui/button';
 import { AppShell } from './AppShell';
+const LandingPage = lazy(() => import('@/features/landing/LandingPage').then(module => ({ default: module.LandingPage })));
 const FoundationPage = lazy(() => import('./FoundationPage').then(module => ({ default: module.FoundationPage })));
 import { roles, roleOrder, workshopNavigation } from './roles';
 
@@ -37,7 +38,7 @@ const AdminDetailPage = lazy(() => import('@/features/admin/AdminDetailPage').th
 
 function HomeRedirect() {
   const { user } = useAuth();
-  return <Navigate to={user ? roles[user.role].landing : '/login'} replace />;
+  return user ? <Navigate to={roles[user.role].landing} replace /> : <Suspense fallback={<LoadingState label="Loading KaarigarLink..." />}><LandingPage /></Suspense>;
 }
 function RequireSession() {
   const { user } = useAuth();
