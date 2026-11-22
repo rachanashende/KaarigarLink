@@ -49,7 +49,7 @@ IDs are strings (cuid). Dates are ISO 8601 strings. Coordinates are decimal degr
 | OrderStatus | `CONFIRMED` `IN_PROGRESS` `COMPLETED` `CANCELLED` |
 | MilestoneStatus | `PENDING` `IN_PROGRESS` `COMPLETED` `APPROVED` `REWORK_REQUIRED` |
 | InspectionStatus | `PASSED` `FAILED` `REWORK_REQUIRED` |
-| PaymentStatus | `PENDING` `SUCCEEDED` `FAILED` `REFUNDED` (`REFUNDED` is not used yet) |
+| PaymentStatus | `PENDING` `SUCCEEDED` `FAILED` `REFUNDED` (`REFUNDED` only through the explicit refund operation) |
 
 ---
 
@@ -107,6 +107,9 @@ Public. Body `{ "email": "...", "password": "..." }` → `200` with the same `{ 
 Any authenticated role → `200 { "data": { "user": { ... } } }`. `401` if the token is missing or invalid.
 
 ---
+
+### ✅ `PATCH /api/auth/me` (M11)
+Any signed-in user edits their **own** account. Body (strict, at least one field): `{ "name"?: "2-100 chars", "phone"?: "≤ 20 chars" | null }`. Email, role and password can't change here (any of them → `400`). Returns `200 { user }` (public fields, never `passwordHash`). No token → `401`.
 
 ## Workshops ✅
 
@@ -714,6 +717,17 @@ Owning WORKSHOP only. Send at least one of `totalPrice`, `estimatedDays`, `notes
 | `404 "Quote not found"` | unknown id or another workshop's quote |
 | `409` | quote not `SUBMITTED`, invitation no longer `ACCEPTED`, job no longer `OPEN`/`MATCHED` (e.g. awarded or cancelled) or past its deadline |
 
+### ✅ `POST /api/quotes/:quoteId/withdraw` (M10)
+Optional body (M11): `{ "expectedUpdatedAt": "<the quote updatedAt you last read>" }`. A stale value → `409` (see below).
+
+#### Optimistic concurrency (M11)
+`PATCH /api/quotes/:quoteId` and `POST /api/quotes/:quoteId/withdraw` accept `expectedUpdatedAt`, the quote's `updatedAt` exactly as last read. `updatedAt` advances strictly on every quote write, so it acts as the version. The check runs under the quote row lock: if the quote changed since that version → `409 "This quote was changed since you loaded it. Reload the latest version and try again."` and nothing is written. The field is optional, so clients that omit it keep the earlier last-write-wins behaviour. `expectedUpdatedAt` alone (no change) → `400`.
+
+WORKSHOP only, for its **own** quote. **No body** (any field → `400`). `SUBMITTED` → `WITHDRAWN`, in one transaction that locks the job `FOR SHARE`, then the quote `FOR UPDATE` (same order as edits and award, so a withdrawal and an award never interleave).
+- `200 { changed: true, quote }` (`"Quote withdrawn"`). A repeat → `200 { changed: false, quote }` (`"Quote already withdrawn"`).
+- Other statuses → `409 "Only SUBMITTED quotes can be withdrawn (this quote is ACCEPTED)"`. Another workshop's or unknown quote → `404 "Quote not found"`.
+- A withdrawn quote stays in history and can't be resubmitted for that invitation (one quote per invitation).
+
 ### `GET /api/quotes/jobs/:jobId`
 Owning BUYER only (another buyer's job → `404 "Job not found"`; other roles → `403`). Newest first.
 ```json
@@ -736,7 +750,7 @@ The buyer awards **one** quote for a job. Awarding creates the job's **single or
 |---|---|---|
 | ✅ `POST /api/orders/award/:quoteId` | owning BUYER | Award a quote and create the order |
 | ✅ `GET /api/orders/mine` | BUYER / WORKSHOP | My orders: as the buyer, or as the awarded workshop |
-| ✅ `GET /api/orders/:orderId` | the order's BUYER / awarded WORKSHOP | One order with its job, quote and workshop |
+| ✅ `GET /api/orders/:orderId` | the order's BUYER / awarded WORKSHOP / assigned INSPECTOR | One order with its job, quote, workshop, milestones, inspections and payments (the inspector gets no `payments`) |
 | ✅ `POST /api/orders/:orderId/start` | awarded WORKSHOP | `CONFIRMED` → `IN_PROGRESS` |
 | ✅ `POST /api/orders/:orderId/complete` | the order's BUYER | `IN_PROGRESS` → `COMPLETED` |
 | ✅ `POST /api/orders/:orderId/cancel` | the order's BUYER | `CONFIRMED`/`IN_PROGRESS` → `CANCELLED` |
@@ -807,10 +821,12 @@ Award is allowed only while **all** of these hold. Otherwise it returns `409` an
 - Two awards for one job run one after the other: the second sees the order and gets `200` (same quote) or `409` (different quote).
 
 ### `GET /api/orders/mine`
+**Query (M11):** `view=summary` (default, unchanged) or `view=full`. `full` returns, for every order, the same detail as `GET /api/orders/:orderId` (job, quote, workshop, buyer, rating, milestones, inspections, payments) in one request. Other values → `400`.
+
 BUYER: orders for my jobs. WORKSHOP: orders awarded to my workshop. Newest first. Each order includes `job: { id, title, status, deadline }` and `workshop: { id, businessName, city }`. Other roles → `403`. A WORKSHOP user without a profile → `404 "No workshop profile found for this user"`.
 
 ### `GET /api/orders/:orderId`
-Only the order's buyer and the awarded workshop can read it. Anyone else with those roles → `404 "Order not found"`; INSPECTOR / ADMIN → `403` (not part of I4). Returns `{ order }` with the full `job`, the `quote`, `workshop: { id, businessName, city }`, and `milestones`, `inspections` and `payments` (empty until I5).
+The order's buyer, the awarded workshop and the **currently assigned inspector** (B1; without `payments`) can read it. Anyone else → `404 "Order not found"`; ADMIN → `403`. Returns `{ order }` with the full `job`, the `quote`, `workshop: { id, businessName, city }`, `buyer: { id, name }` (M10, no email), `rating: { id, score, review, createdAt } | null` (M10), and `milestones`, `inspections` and `payments`.
 
 ### Order lifecycle
 
@@ -826,11 +842,11 @@ The order and its job always change **together, in one transaction**. Each trans
 |---|---|---|---|
 | `POST /api/orders/:orderId/start` | none (any field → `400`) | `CONFIRMED` | Order and job → `IN_PROGRESS`. The workshop doesn't need to still be `VERIFIED` (checked at award) |
 | `POST /api/orders/:orderId/complete` | none (any field → `400`) | `IN_PROGRESS` | Order and job → `COMPLETED`; `actualCompletionDate` = now; the workshop's `totalCompletedJobs` + 1 (exactly once). Allowed after the job deadline. **QC gate:** the latest inspection must be `PASSED`. Milestone statuses are not checked |
-| `POST /api/orders/:orderId/cancel` | `{ "reason": "…" }` | `CONFIRMED`, `IN_PROGRESS` | Order and job → `CANCELLED`; `reason` stored as `cancellationReason`; the job's `INVITED`/`ACCEPTED` invitations → `EXPIRED` (the same rule as job cancellation; `DECLINED`/`EXPIRED` are kept). The accepted quote **stays `ACCEPTED`**, and rejected quotes stay `REJECTED` |
+| `POST /api/orders/:orderId/cancel` | `{ "reason": "…" }` | `CONFIRMED`, `IN_PROGRESS` | Order and job → `CANCELLED`; `reason` stored as `cancellationReason`; the job's `INVITED`/`ACCEPTED` invitations → `EXPIRED` (the same rule as job cancellation; `DECLINED`/`EXPIRED` are kept). The accepted quote **stays `ACCEPTED`**, and rejected quotes stay `REJECTED`. **B3:** `PENDING` payments → `FAILED`; `SUCCEEDED` payments are kept and reported as `refundDue` (see [refund policy](#cancellation-and-refund-policy-b3)) |
 
 `reason` is required: a string, trimmed, 3-1000 characters. Any other field → `400`.
 
-**Response** (all three): `200` with `{ changed, order }`. `order` has the same shape as the award response (`job`, `quote`, `workshop`, money as 2-decimal strings).
+**Response** (all three): `200` with `{ changed, order }`; cancel also returns `payments` (the payment summary, including `refundDue`). `order` has the same shape as the award response (`job`, `quote`, `workshop`, money as 2-decimal strings).
 ```json
 { "success": true, "message": "Order completed",
   "data": { "changed": true, "order": { "id": "cm…", "status": "COMPLETED", "actualCompletionDate": "2026-11-22T10:00:00.000Z",
@@ -895,43 +911,104 @@ REWORK_REQUIRED (set by a REWORK_REQUIRED inspection) --start (workshop)--> IN_P
 
 | Method & path | Role | Purpose |
 |---|---|---|
-| ✅ `POST /api/orders/:orderId/inspections` | INSPECTOR | Record an inspection on an `IN_PROGRESS` order |
-| ✅ `GET /api/orders/:orderId/inspections` | BUYER / WORKSHOP / INSPECTOR / ADMIN (see access) | The order's inspection history, newest first |
+| ✅ `POST /api/orders/:orderId/inspections` | the order's **assigned** INSPECTOR | Record an inspection on an `IN_PROGRESS` order |
+| ✅ `GET /api/orders/:orderId/inspections` | BUYER / WORKSHOP / assigned INSPECTOR / ADMIN (see access) | The order's inspection history, newest first |
+| ✅ `PUT /api/orders/:orderId/inspector` | ADMIN | Assign or reassign the order's inspector: `{ "inspectorId": "…" }` |
+| ✅ `DELETE /api/orders/:orderId/inspector` | ADMIN | End the current assignment (no body) |
+| ✅ `GET /api/orders/:orderId/inspector-assignments` | ADMIN | Full assignment history of the order, newest first |
+| ✅ `GET /api/inspections/assigned` | INSPECTOR | Orders currently assigned to me (`?page&limit`) |
+| ✅ `GET /api/inspections` | ADMIN | Every inspection on the platform (`?status&inspectorId&orderId&page&limit`) |
+| ✅ `GET /api/inspections/inspectors` | ADMIN | Inspector users with their number of active assignments |
 
-**Body:** `{ "status": "PASSED" | "FAILED" | "REWORK_REQUIRED", "findings"?: "…" }` (`findings` trimmed, 1-2000 characters). Unknown fields → `400`. The inspector is the caller; `inspectedAt` is set by the server, strictly after the order's previous inspection.
+### Inspector assignment (B1)
+- ADMIN assigns **one** INSPECTOR to a `CONFIRMED` or `IN_PROGRESS` order. Other statuses → `409 "Inspectors can only be assigned to CONFIRMED or IN_PROGRESS orders (this order is COMPLETED)"`. The user must exist (`404 "Inspector not found"`) and have role INSPECTOR (`409 "Only users with the INSPECTOR role can be assigned"`). Body: `inspectorId` only (unknown fields → `400`).
+- **At most one active assignment per order**, enforced by the database and by the order lock, so parallel assignments are serialised.
+- **Reassignment** ends the current assignment (`active: null`, `endedAt`, `endedById`) and creates a new one in the same transaction. Rows are never deleted, so the history shows who assigned whom, when, and who ended it.
+- Assigning the inspector who is already assigned → `200 "Inspector already assigned to this order"`, `changed: false`. New or replaced → `201` (`"Inspector assigned"` / `"Inspector reassigned"`), `{ changed, assignment, previous }`. Unassign → `200 { changed, assignment }`.
+- **Only the current inspector** can create inspections, read the order's inspection history, or read the order (`GET /api/orders/:orderId`, returned **without payments**). Everyone else, including a replaced inspector, gets `404 "Order not found"`. Inspections keep their `inspectorId`, so attribution survives reassignment.
+- The assignment check runs under the order lock, so an inspection and a reassignment never interleave: an inspection either commits before the reassignment, or is refused.
+- After the order completes or is cancelled, the assignment stays as a record and can no longer change.
+- `GET /api/inspections/assigned` → `{ items: [{ assignmentId, assignedAt, order: { id, status, expectedCompletionDate, job: { title, description, material, manufacturingProcess, quantity, quantityUnit, deadline, technicalSpecifications, … }, workshop } }], pagination }`.
 
-**Response** `201`: `{ inspection: { id, orderId, inspectorId, status, findings, inspectedAt, inspector: { id, name } }, reworkMilestoneId }`.
+### Private inspection drafts (M11)
 
-- **`REWORK_REQUIRED`** sends the order's active milestone (`IN_PROGRESS` or `COMPLETED`, highest sequence) back to `REWORK_REQUIRED`: `completedAt` is cleared and `notes` = the findings (or `"Rework requested after inspection"`). `reworkMilestoneId` is its id. With no such milestone → `409 "REWORK_REQUIRED needs an IN_PROGRESS or COMPLETED milestone to send back for rework"` and nothing is written. The workshop then restarts that milestone.
-- Only `IN_PROGRESS` orders can be inspected → `409 "Only IN_PROGRESS orders can be inspected (this order is CONFIRMED)"`.
-- **QC gate:** completing the order needs the **latest** inspection to be `PASSED` (see [Order lifecycle](#order-lifecycle)).
+| Method & path | Role | Purpose |
+|---|---|---|
+| ✅ `GET /api/orders/:orderId/inspection-draft` | assigned INSPECTOR | My draft for this order, or `{ draft: null }` |
+| ✅ `PUT /api/orders/:orderId/inspection-draft` | assigned INSPECTOR | Create or replace my draft: `{ "checklist": { items, rework? }, "findings"?: "≤ 4000 chars" }` |
+| ✅ `DELETE /api/orders/:orderId/inspection-draft` | assigned INSPECTOR | Delete my draft → `{ deleted: true \| false }` |
 
-**Access**
-- Create: INSPECTOR only (others `403`); unknown order → `404`. There is no inspector-assignment model, so any inspector can inspect any in-progress order whose id they have. No endpoint lists orders to inspectors.
-- History: the order's buyer and awarded workshop; an inspector **only for orders they have inspected**; ADMIN for any order (read-only oversight). Everyone else → `404 "Order not found"`.
+- A draft is **private** to one inspector and one order (unique per pair). It's never an inspection: it doesn't appear in inspection history or the admin list, doesn't count for the QC gate, and changes no order or milestone.
+- Only the **currently assigned** inspector can read or change their draft (others with the INSPECTOR role → `404 "Order not found"`; other roles → `403`). After a reassignment the previous inspector's draft stays stored but unreachable, and the new inspector starts with no draft: there is no transfer.
+- Drafts can be saved while the order is `CONFIRMED` or `IN_PROGRESS` (otherwise `409`). Writes take the same job → order lock as inspections.
+- **Submitting an inspection deletes the submitter's draft in the same transaction.**
+
+### Recording an inspection
+
+**Structured checklist (M11):** `checklist` (optional) is stored as structured JSON on the inspection (`Inspection.checklist = { version: 1, items, rework? }`), separately from the free-text `findings`:
+- `items`: up to 20 `{ id (≤100), label (≤200), result: "UNRECORDED" | "PASS" | "FAIL" | "NOT_APPLICABLE", notes (≤4000), evidence: [{ name, mediaType, sizeBytes }] (≤3, metadata only) }`, with unique ids;
+- `rework`: `{ reason, correctiveAction, deadline?: "YYYY-MM-DD" }`, allowed with `REWORK_REQUIRED` only (otherwise `400`).
+
+Inspections recorded before M11 have `checklist: null`.
+
+**Body:** `{ "status": "PASSED" | "FAILED" | "REWORK_REQUIRED", "findings"?: "…", "milestoneId"?: "…" }` (`findings` trimmed, 1-2000 characters; `milestoneId` only with `REWORK_REQUIRED`). Unknown fields → `400`. The inspector is the caller; `inspectedAt` is set by the server, strictly after the order's previous inspection.
+
+**Response** `201`: `{ inspection: { id, orderId, inspectorId, status, findings, inspectedAt, milestoneId, inspector: { id, name } }, reworkMilestoneId }`.
+
+- **`REWORK_REQUIRED` (B2)** sends **one** milestone back to `REWORK_REQUIRED` (`completedAt` cleared, `notes` = the findings or `"Rework requested after inspection"`). The inspection stores it as `milestoneId`.
+  - With `milestoneId`: any **started** milestone of this order, `IN_PROGRESS`, `COMPLETED` or **`APPROVED`**. This makes rework possible after approval, even when every milestone is approved. `PENDING` → `409 "Milestone 1 has not started yet; only started milestones can be sent back for rework"`; already `REWORK_REQUIRED` → `409 "Milestone 1 is already awaiting rework"`; another order's or unknown → `404 "Milestone not found"`.
+  - Without it: the active milestone (`IN_PROGRESS`/`COMPLETED`, highest sequence). If the order has milestones but none is active → `409 "No IN_PROGRESS or COMPLETED milestone to send back; pass milestoneId to choose one (an APPROVED milestone can be reopened)"`.
+  - An order with **no milestones**: the inspection is just recorded (`milestoneId: null`).
+  - Later milestones are never changed. The workshop restarts the milestone and the buyer approves it again.
+- **`FAILED`** changes no milestone.
+- Only `IN_PROGRESS` orders can be inspected; after `COMPLETED`/`CANCELLED` → `409 "Only IN_PROGRESS orders can be inspected (this order is COMPLETED)"`.
+- **QC gate:** completing the order needs the **latest** inspection to be `PASSED`. A later `FAILED`/`REWORK_REQUIRED` blocks it again (see [Order lifecycle](#order-lifecycle)). Milestone statuses are not checked.
+- Any failure rolls the whole inspection back, including the milestone change.
+
+**History access:** the order's buyer and awarded workshop; the **currently assigned** inspector; ADMIN for any order. Everyone else → `404 "Order not found"`.
+
+**Platform-wide (ADMIN):** `GET /api/inspections` → `{ items: [inspection + inspector + order: { id, status, buyerId, workshop, job: { id, title } }], pagination }`, newest first; filters `status`, `inspectorId`, `orderId`; `page` ≥ 1, `limit` 1-100 (default 20). Unknown query keys → `400`.
 
 ---
 
 ## Payments (simulated) ✅
 
-> **Mock only.** There is no payment gateway. A payment is created `PENDING` and the buyer then *simulates* the gateway result. Only database state changes; no money moves. `transactionRef` is `"SIM-<paymentId>"` and every summary carries `"simulated": true`.
+> **Mock only.** There is no payment gateway. A payment is created `PENDING` and the buyer then *simulates* the gateway result; refunds are likewise only *recorded*. Only database state changes; no money moves. `transactionRef` is `"SIM-<paymentId>"` and every summary carries `"simulated": true`.
 
 | Method & path | Role | Purpose |
 |---|---|---|
 | ✅ `POST /api/orders/:orderId/payments` | the order's BUYER | Create a `PENDING` payment |
 | ✅ `POST /api/payments/:paymentId/simulate` | the order's BUYER | Simulate the result: `{ "outcome": "SUCCEEDED" \| "FAILED" }` |
+| ✅ `POST /api/payments/:paymentId/refund` | ADMIN / the awarded WORKSHOP | Record a refund of a `SUCCEEDED` payment of a `CANCELLED` order (no body) |
 | ✅ `GET /api/orders/:orderId/payments` | the order's BUYER / awarded WORKSHOP | Payments, newest first, with a summary |
 
 **Create body:** `{ "amount": "5000.00", "description"?: "Advance" }`. `amount` is a number or decimal string, > 0, at most 2 decimals and 10 integer digits (same rules as quote prices); `description` ≤ 500. Unknown fields → `400`.
 
-**Summary** (in every response): `{ agreedPrice, paid, pending, remaining, simulated: true }`, money as 2-decimal strings; `remaining = agreedPrice − paid − pending`.
+**Summary** (in every response): `{ agreedPrice, paid, pending, remaining, refunded, refundDue, simulated: true }`, money as 2-decimal strings.
+- `paid` = `SUCCEEDED` total (refunded payments are no longer counted)
+- `remaining = agreedPrice − paid − pending`
+- `refunded` = `REFUNDED` total
+- `refundDue` = money still owed back to the buyer: the `SUCCEEDED` total of a **`CANCELLED`** order (`"0.00"` otherwise)
 
 **Rules**
-- **Cumulative limit:** `PENDING` (reserved) + `SUCCEEDED` + the new amount must not exceed `agreedPrice` (equal is allowed) → `409 "Payment of 500.26 exceeds the remaining payable amount of 500.25 (agreed 12500.50, paid 10000.00, pending 2000.25)"`. Exact decimal arithmetic, checked under the order lock, so parallel requests can't overshoot together. A `FAILED` payment releases its reservation.
+- **Cumulative limit:** `PENDING` (reserved) + `SUCCEEDED` + the new amount must not exceed `agreedPrice` (equal is allowed) → `409 "Payment of 500.26 exceeds the remaining payable amount of 500.25 (agreed 12500.50, paid 10000.00, pending 2000.25)"`. Exact decimal arithmetic, checked under the order lock, so parallel requests can't overshoot together. `FAILED` and `REFUNDED` payments reserve nothing.
 - New payments only on `CONFIRMED`/`IN_PROGRESS` orders → `409 "Cannot add a payment to an order that is COMPLETED"`.
-- Simulate: `PENDING` → `SUCCEEDED` (sets `paidAt`) or `FAILED`, once. The same outcome again → `200` `changed: false`; the other outcome → `409 "Only PENDING payments can be processed (this payment is FAILED)"`. On a `CANCELLED` order a pending payment can only be marked `FAILED` → otherwise `409`.
+- Simulate: `PENDING` → `SUCCEEDED` (sets `paidAt`) or `FAILED`, once. The same outcome again → `200` `changed: false`; anything else → `409 "Only PENDING payments can be processed (this payment is FAILED)"`. `REFUNDED` can never be simulated; only the refund operation sets it.
+- Payment records are never deleted.
 
-**Responses:** create `201 { payment, summary }`; simulate `200 { changed, payment, summary }`; list `200 { payments, summary }`.
+### Cancellation and refund policy (B3)
+- **Cancelling an order is always allowed** (buyer, `CONFIRMED`/`IN_PROGRESS`).
+- In the cancellation transaction every **`PENDING` payment becomes `FAILED`**, releasing its reservation.
+- **`SUCCEEDED` payments are not changed by cancellation.** Cancelling does not mean the money was returned: it is reported as `refundDue`, in the cancel response (`data.payments`, a summary) and in every payment summary.
+- **Refund = explicit operation** `POST /api/payments/:paymentId/refund`, by ADMIN or the order's awarded WORKSHOP (buyer/inspector → `403`; another workshop or unknown payment → `404 "Payment not found"`; any body → `400`):
+  - only `SUCCEEDED` payments → otherwise `409 "Only SUCCEEDED payments can be refunded (this payment is FAILED)"`;
+  - only on `CANCELLED` orders → otherwise `409 "Refunds are only for CANCELLED orders (this order is IN_PROGRESS)"`;
+  - sets `status: REFUNDED`, `refundedAt`, `refundedById` (`refundedBy: { id, name, role }` in responses); `transactionRef` and `paidAt` are kept;
+  - a repeat → `200 "Payment already REFUNDED"`, `changed: false`.
+- The database enforces that `REFUNDED` ⇔ `refundedAt` and `refundedById` are set.
+- There are no refunds on completed orders (disputes are out of scope).
+
+**Responses:** create `201 { payment, summary }`; simulate and refund `200 { changed, payment, summary }`; list `200 { payments, summary }`.
 
 **Access:** wrong role → `403`; another buyer's order → `404 "Order not found"`; another buyer's or unknown payment → `404 "Payment not found"`.
 
@@ -942,7 +1019,7 @@ REWORK_REQUIRED (set by a REWORK_REQUIRED inspection) --start (workshop)--> IN_P
 | Method & path | Role | Purpose |
 |---|---|---|
 | ✅ `POST /api/orders/:orderId/rating` | the order's BUYER | Rate a `COMPLETED` order, once |
-| ✅ `GET /api/workshops/:id/ratings` | any authenticated user | A workshop's rating history, newest first |
+| ✅ `GET /api/workshops/:id/ratings` | any authenticated user | A workshop's rating history, newest first (`?page&limit`) |
 
 **Body:** `{ "score": 1-5 (integer), "review"?: "…" }` (`review` trimmed, ≤ 2000). Unknown fields → `400`.
 
@@ -950,4 +1027,141 @@ REWORK_REQUIRED (set by a REWORK_REQUIRED inspection) --start (workshop)--> IN_P
 
 - Only `COMPLETED` orders → `409 "Only COMPLETED orders can be rated (this order is IN_PROGRESS)"`. A second rating → `409 "This order has already been rated"` (also under parallel submissions).
 - **Aggregate:** one atomic SQL update, `rating = (rating × ratingCount + score) / (ratingCount + 1)`, `ratingCount + 1`, so parallel ratings of the same workshop are all counted. It doesn't change the workshop's `updatedAt` (the profile version), like `totalCompletedJobs`. Seeded workshops start with seeded aggregates that have no individual rating rows, so `ratingCount` can be larger than the history length.
-- History `200`: `{ workshop: { id, businessName, rating, ratingCount }, ratings: [{ id, orderId, score, review, createdAt, buyer: { id, name } }] }`. Unknown workshop → `404`.
+- History `200`: `{ workshop: { id, businessName, rating, ratingCount }, ratings: [{ id, orderId, score, review, createdAt, buyer: { id, name } }], pagination: { page, limit, total, totalPages } }`; `page` ≥ 1, `limit` 1-100 (default 20), unknown query keys → `400`. Unknown workshop → `404`.
+
+---
+
+## Admin directory (M10) ✅
+
+Read-only lists for the admin workspace. ADMIN only (others `403`, no token `401`). Writes stay on their own endpoints: verification on `PUT /api/workshops/:id`, assignments on `/api/orders/:orderId/inspector`.
+
+| Method & path | Returns (`items`, newest first) |
+|---|---|
+| ✅ `GET /api/admin/users` | Public user fields (`id, name, email, role, phone, createdAt, updatedAt, workshop`); never `passwordHash` |
+| ✅ `GET /api/admin/orders` | Orders with `milestones`, `quote: { id, totalPrice, estimatedDays, createdAt, status, notes }`, `latestInspectionStatus` (`PASSED`/`FAILED`/`REWORK_REQUIRED`/`null`) and `activeAssignment: { inspectorId, assignedAt } \| null`; money as 2-decimal strings |
+| ✅ `GET /api/admin/quotes` | All quotes (`totalPrice` as a 2-decimal string) |
+| ✅ `GET /api/admin/invitations` | `id, jobId, workshopId, status, matchScore, rank, matchReasons, createdAt, respondedAt` (the matching snapshot stored at invite time) |
+| ✅ `GET /api/admin/workshops` (M11) | Full workshop profiles (machines, capabilities, capacities, owner `{ id, name }`), replacing one `GET /api/workshops/:id` per workshop |
+
+**Query:** `page` ≥ 1, `limit` 1-100 (default 50); unknown keys → `400`. **Response:** `{ items, pagination: { page, limit, total, totalPages } }`.
+
+---
+
+## Documents (M12) ✅
+
+Real file storage for the two document workflows: buyer **design files** on jobs and inspector **evidence** on orders. Contents are stored by the storage backend (local disk under `FILE_STORAGE_DIR`, default `backend/storage/uploads`, outside every served directory). PostgreSQL keeps metadata only (`Document`: kind, uploader, job/order/inspection, sanitised original name, MIME type, size, SHA-256, server-generated storage key).
+
+| Method & path | Who | Purpose |
+|---|---|---|
+| ✅ `POST /api/jobs/:id/documents` | the job's BUYER, job `DRAFT`/`OPEN`/`MATCHED` | Upload a design file |
+| ✅ `GET /api/jobs/:id/documents` | ADMIN, the job's buyer, workshops invited to or awarded the job, the order's current inspector | List design files |
+| ✅ `POST /api/orders/:orderId/documents` | the order's **current** INSPECTOR, order `IN_PROGRESS` | Upload inspection evidence |
+| ✅ `GET /api/orders/:orderId/documents` | ADMIN, the order's buyer and awarded workshop, the current inspector | List evidence |
+| ✅ `GET /api/documents/:documentId/download` | anyone who can list it | Download (always `Content-Disposition: attachment`, `nosniff`, `no-store`) |
+| ✅ `DELETE /api/documents/:documentId` | its uploader | Delete: design files while the job is editable; evidence only while it is not part of a submitted inspection |
+
+**Upload format:** the request body is the raw file. `Content-Type` = the file's MIME type, `X-File-Name` = the URI-encoded file name. Bodies are read only after authentication, up to `MAX_UPLOAD_BYTES` (default 10 MB; larger → `413`). At most 20 files per job or order.
+
+**Validation (`400`):**
+- extension allow-list: `pdf, png, jpg, jpeg, webp, txt, csv, docx, xlsx, dxf, dwg, step, stp, stl, iges, igs`;
+- the MIME type must match the extension;
+- PDF, PNG, JPEG, WebP, DOCX and XLSX contents are checked against their magic bytes;
+- empty files are rejected.
+
+**Safety:**
+- the client name is sanitised for display only, and never used as a path;
+- storage keys (`YYYY/MM/<uuid>`) are generated by the server and validated against the storage root before every access, so path traversal is impossible;
+- files are never overwritten;
+- a failed metadata write removes the stored file;
+- a missing file on download → `410`.
+
+**Evidence and inspections:** checklist evidence entries may carry `documentId`. Submitting the inspection links those documents (uploaded by the submitter, on this order) to the inspection, after which they can't be deleted.
+
+Responses: upload `201 { document }`; list `200 { documents }`; delete `200 { deleted: true }`. Anyone without access gets `404` (existence is not revealed); a non-uploader deleting gets `403`.
+
+---
+
+## Audit history (M12) ✅
+
+Append-only `AuditEvent` rows: actor id and role, action, entity type and id, optional order and job ids, small non-sensitive `metadata`, and a timestamp.
+- **Written inside the business transaction**, so failed operations record nothing.
+- **Never on repeats** (`changed: false`).
+- **Immutable:** a database trigger rejects UPDATE and DELETE, and there is no write API.
+- **No sensitive data:** profile events store field names, not values; password changes store no secrets.
+
+| Method & path | Who | Purpose |
+|---|---|---|
+| ✅ `GET /api/audit` | ADMIN | Platform history, newest first. Filters: `action`, `entityType`, `actorId`, `orderId`, `jobId`, `page`, `limit` (1-100, default 20) |
+| ✅ `GET /api/orders/:orderId/history` | the order's buyer and awarded workshop, the current inspector, ADMIN | The order's events, oldest first (`page`, `limit`) |
+
+**Actions:**
+
+| Area | Actions |
+|---|---|
+| Jobs | `JOB_CREATED`, `JOB_UPDATED`, `JOB_CANCELLED` |
+| Invitations | `WORKSHOP_INVITED`, `INVITATION_ACCEPTED`, `INVITATION_DECLINED` |
+| Quotes | `QUOTE_SUBMITTED`, `QUOTE_UPDATED`, `QUOTE_WITHDRAWN`, `QUOTE_AWARDED` |
+| Orders | `ORDER_STARTED`, `ORDER_COMPLETED`, `ORDER_CANCELLED` |
+| Milestones | `MILESTONE_CREATED`, `MILESTONE_STARTED`, `MILESTONE_COMPLETED`, `MILESTONE_APPROVED` |
+| Inspections | `INSPECTION_PASSED`, `INSPECTION_FAILED`, `INSPECTION_REWORK_REQUIRED` |
+| Payments | `PAYMENT_CREATED`, `PAYMENT_SUCCEEDED`, `PAYMENT_FAILED`, `PAYMENT_REFUNDED` |
+| Ratings | `RATING_SUBMITTED` |
+| Workshops | `WORKSHOP_VERIFICATION_<STATUS>`, `WORKSHOP_PROFILE_UPDATED` |
+| Inspector assignment | `INSPECTOR_ASSIGNED`, `INSPECTOR_REASSIGNED`, `INSPECTOR_UNASSIGNED` |
+| Documents | `DOCUMENT_UPLOADED`, `DOCUMENT_DELETED` |
+| Accounts | `PROFILE_UPDATED`, `PASSWORD_CHANGED` |
+
+Not recorded: machine, capability and capacity edits; milestone edits; draft saves.
+
+---
+
+## Notifications (M12) ✅
+
+Database-backed in-app notifications, created in the same transaction as the audit event that causes them:
+- one per recipient per event (unique `dedupeKey`);
+- never sent to the actor themselves;
+- recipients are the parties of the record: for example, the buyer on quote changes, the workshop owner on invitations, awards, payments and verification decisions, the order's parties on order, milestone and inspection events, and the inspector on assignments.
+
+| Method & path | Purpose |
+|---|---|
+| ✅ `GET /api/notifications` | My notifications, newest first: `{ items, unread, pagination }` (`unread=true`, `page`, `limit`) |
+| ✅ `GET /api/notifications/unread-count` | `{ unread }` |
+| ✅ `POST /api/notifications/:notificationId/read` | Mark one read (`{ changed }`); someone else's → `404` |
+| ✅ `POST /api/notifications/read-all` | Mark all mine read (`{ updated }`) |
+
+Each item: `{ id, type (the audit action), title, body, entityType, entityId, link (frontend path), readAt, createdAt }`. There is no email, SMS or push delivery.
+
+---
+
+## Demo login (development only) ✅
+
+`POST /api/auth/demo-login` with `{ "role": "BUYER" | "WORKSHOP" | "INSPECTOR" | "ADMIN" }` (nothing else is accepted). It signs in the existing seeded demo account for that role and returns the same `{ user, token }` as `POST /api/auth/login`: a normal JWT with the current token version, subject to normal authorization.
+
+| Seeded account | Role |
+|---|---|
+| `asha.rao@kaarigarlink.test` | BUYER |
+| `precision-works@kaarigarlink.test` | WORKSHOP |
+| `priya.inspector@kaarigarlink.test` | INSPECTOR |
+| `admin@kaarigarlink.test` | ADMIN |
+
+**Restrictions, all enforced by the backend:**
+- Available only when `NODE_ENV=development` **and** `ENABLE_DEMO_LOGIN=true`. It is off by default. With `NODE_ENV=production` and `ENABLE_DEMO_LOGIN=true` the server refuses to start; with any other combination the endpoint answers `404 "Demo login is disabled on this server"` whatever the body.
+- Local requests only: the TCP peer must be a loopback address (not `X-Forwarded-For`), the `Host` header must be `localhost`, `127.0.0.1` or `[::1]`, and an `Origin`, if sent, must be a localhost origin. Otherwise `403`.
+- Unknown roles, lowercase roles, extra fields such as `email` or `userId`, or an empty body → `400`.
+- It never creates or repairs accounts: a missing or altered seed account → `404` (run `npm run db:seed`).
+- Audited as `DEMO_LOGIN` with no secrets.
+
+**Before deploying:** remove `ENABLE_DEMO_LOGIN` from the server environment, or set it to `false`. Optionally hide the frontend buttons with `VITE_DEMO_LOGIN=false`.
+
+---
+
+## Password change (M12) ✅
+
+`PATCH /api/auth/me/password` with `{ currentPassword, newPassword (8-72) }`.
+- Wrong current password, or the same password again → `400`.
+- Increments `User.tokenVersion` (M13) and records `User.passwordChangedAt`. Every token carries the version it was issued with (claim `tv`), and `authenticate` rejects any token whose version differs from the user's (`401 "Session expired after a password change"`). Earlier tokens stop working immediately, even when issued in the same second, which signs out other sessions. Tokens issued before M13 carry no `tv` and count as version 0.
+- The response is `{ user, token }`: a fresh token for the caller.
+- Audited as `PASSWORD_CHANGED` with no secrets.
+- There is no password reset (no email provider).
+
+**Migration:** `20261122160000_add_documents_audit_notifications` (additive): the `Document`, `AuditEvent` and `Notification` tables, the `DocumentKind` enum, `User.passwordChangedAt`, and the append-only trigger on `AuditEvent`. **M13:** `20261122170000_add_token_version` (additive) adds `User.tokenVersion` (default 0), and sets it to 1 for users who had already changed their password, so their pre-change tokens stay invalid.

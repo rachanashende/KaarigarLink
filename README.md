@@ -107,7 +107,19 @@ Browsers only let a frontend call the API if its exact origin is allowed. These 
   CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
   ```
 - Rules for `CORS_ORIGINS`: comma-separated `scheme://host[:port]`, no path, no trailing slash. `*` is allowed in development only.
-- Neither frontend calls the backend yet. Both still run on mock data.
+- The main frontend (`frontend/`) runs in **mock mode** by default and can run in **live mode** against this backend. See [docs/live-integration.md](docs/live-integration.md).
+
+## Running the frontend against the backend (live mode)
+
+1. Start PostgreSQL, then the backend: `cd backend`, `npm run db:deploy`, `npm run db:seed` (optional demo data), `npm run dev` (http://localhost:4000).
+2. In `frontend/`, copy `.env.example` to `.env.local` and set `VITE_SERVICE_MODE=live` and `VITE_API_BASE_URL=http://localhost:4000/api`.
+3. `npm run dev` in `frontend/` and open http://127.0.0.1:5173. Sign in with a backend account (seed accounts use `SEED_DEFAULT_PASSWORD`) or create one on the registration page.
+
+Set `VITE_SERVICE_MODE=mock` (or remove it) to go back to the in-browser demo data.
+
+**Document storage (M12):** uploaded design files and inspection evidence are written to `FILE_STORAGE_DIR` (default `backend/storage/uploads`, relative to `backend/`, git-ignored, never served statically) up to `MAX_UPLOAD_BYTES` (default 10 MB). See `backend/.env.example` and the Documents section of [docs/API.md](docs/API.md). Feature status: [docs/feature-matrix.md](docs/feature-matrix.md).
+
+After pulling new migrations (for example M12's `20261122160000_add_documents_audit_notifications`), run `npm run db:deploy` in `backend/` and restart the backend so the regenerated Prisma client is used (stop the dev server first on Windows: `npx prisma generate` can't replace a locked query engine).
 
 ## Database setup
 
@@ -170,6 +182,8 @@ $env:NODE_ENV="production"; $env:CORS_ORIGINS="http://localhost:5173,http://127.
 - `DATABASE_URL` and `JWT_SECRET` still come from `.env`, unless you set them in the shell.
 
 ## Tests, typecheck and build
+
+The full testing guide, covering databases, test uploads, the migration drift check and the live-mode browser journeys, is in [docs/testing.md](docs/testing.md).
 
 ```bash
 npm test             # full suite (unit + API)
