@@ -68,8 +68,14 @@ const complete = (orderId: string, as = ASHA, body?: Record<string, unknown>) =>
 const cancel = (orderId: string, reason: unknown = 'Buyer changed plans', as = ASHA) =>
   act(orderId, 'cancel', as, { reason });
 
-/** I5: completion needs a PASSED inspection (recorded by the seed inspector). */
+/** I5: completion needs a PASSED inspection, recorded by the assigned seed inspector. */
 const passQc = async (orderId: string) => {
+  // B1: the inspector must be assigned (idempotent: 201 first time, 200 after).
+  const assigned = await request(app)
+    .put(`/api/orders/${orderId}/inspector`)
+    .set(auth(await tokenFor(ADMIN)))
+    .send({ inspectorId: INSPECTOR });
+  expect([200, 201]).toContain(assigned.status);
   const res = await request(app)
     .post(`/api/orders/${orderId}/inspections`)
     .set(auth(await tokenFor(INSPECTOR)))

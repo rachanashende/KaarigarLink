@@ -93,6 +93,12 @@ const act = async (orderId: string, action: 'start' | 'complete' | 'cancel') => 
 };
 /** I5: completion needs a PASSED inspection first. */
 const passQc = async (orderId: string) => {
+  // B1: the inspector must be assigned (idempotent: 201 first time, 200 after).
+  const assigned = await request(app)
+    .put(`/api/orders/${orderId}/inspector`)
+    .set(auth(await tokenFor('seed-user-admin')))
+    .send({ inspectorId: 'seed-user-inspector' });
+  expect([200, 201]).toContain(assigned.status);
   const res = await request(app)
     .post(`/api/orders/${orderId}/inspections`)
     .set(auth(await tokenFor('seed-user-inspector')))

@@ -17,13 +17,21 @@ export type TokenFor = (userId: string) => Promise<string>;
 export const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 /** Calls the API as a seed user. `body` undefined sends no body. */
-export async function api(tokenFor: TokenFor, as: string, method: 'get' | 'post' | 'patch', path: string, body?: unknown) {
+export async function api(tokenFor: TokenFor, as: string, method: 'get' | 'post' | 'patch' | 'put' | 'delete', path: string, body?: unknown) {
   const req = request(app)[method](`/api${path}`).set(auth(await tokenFor(as)));
   return body === undefined ? req : req.send(body as object);
 }
 
-/** invite -> accept -> quote -> award. Returns the new order id (agreed price 12500.50). */
-export async function awardedOrder(tokenFor: TokenFor, jobId = BRACKETS, workshopId = PRECISION, totalPrice = '12500.50') {
+/** ADMIN assigns `inspectorId` (default: the seed inspector) to the order. */
+export async function assignInspector(tokenFor: TokenFor, orderId: string, inspectorId = INSPECTOR) {
+  return api(tokenFor, ADMIN, 'put', `/orders/${orderId}/inspector`, { inspectorId });
+}
+
+/**
+ * invite -> accept -> quote -> award, then (unless `assign` is false) the seed
+ * inspector is assigned. Returns the new order id (agreed price 12500.50).
+ */
+export async function awardedOrder(tokenFor: TokenFor, jobId = BRACKETS, workshopId = PRECISION, totalPrice = '12500.50', assign = true) {
   const inv = await api(tokenFor, ASHA, 'post', `/jobs/${jobId}/invitations`, { workshopId });
   expect(inv.status).toBe(201);
   const invitationId: string = inv.body.data.invitation.id;
@@ -33,7 +41,9 @@ export async function awardedOrder(tokenFor: TokenFor, jobId = BRACKETS, worksho
   expect(q.status).toBe(201);
   const res = await api(tokenFor, ASHA, 'post', `/orders/award/${q.body.data.quote.id}`);
   expect(res.status).toBe(201);
-  return res.body.data.order.id as string;
+  const orderId = res.body.data.order.id as string;
+  if (assign) expect((await assignInspector(tokenFor, orderId)).status).toBe(201);
+  return orderId;
 }
 
 export async function startedOrder(tokenFor: TokenFor, jobId = BRACKETS, workshopId = PRECISION) {

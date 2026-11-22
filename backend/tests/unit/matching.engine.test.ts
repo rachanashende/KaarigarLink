@@ -261,14 +261,14 @@ describe('distance handling in matching', () => {
     expect(r.eligibility.eligible).toBe(true);
     expect(r.distanceKm).toBeNull();
     expect(r.scoreBreakdown).toMatchObject({ distanceScore: null, effectiveWeights: RENORMALISED });
-    expect(r.explanations).toContain('Job has no location, so distance is not scored');
+    expect(r.explanations).toContain('Distance not scored: the job has no map coordinates (a delivery city and state are not converted to coordinates)');
   });
 
   it('workshop without a location: eligible, distance omitted and weights re-normalised', () => {
     const r = evaluate(job(), workshop({ latitude: null, longitude: null }));
     expect(r.eligibility.eligible).toBe(true);
     expect(r.scoreBreakdown).toMatchObject({ distanceScore: null, effectiveWeights: RENORMALISED });
-    expect(r.explanations).toContain('Workshop has no location on its profile, so distance is not scored');
+    expect(r.explanations).toContain('Distance not scored: the workshop profile has no map coordinates');
   });
 
   it('treats invalid coordinates like missing ones (never excluded)', () => {

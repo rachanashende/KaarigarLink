@@ -138,4 +138,19 @@ describe('workshop rating history', () => {
     expect((await api(tokenFor, ASHA, 'get', '/workshops/no-such-ws/ratings')).status).toBe(404);
     expect((await request(app).get(`/api/workshops/${PRECISION}/ratings`)).status).toBe(401);
   });
+
+  it('B5: the history is paginated (default limit 20, max 100); the response keeps workshop and ratings', async () => {
+    const first = await completedOrder(tokenFor);
+    await rate(first, { score: 5, review: 'first' });
+    const second = await completedOrder(tokenFor, SHAFTS);
+    await rate(second, { score: 3, review: 'second' });
+    const all = await api(tokenFor, ASHA, 'get', `/workshops/${PRECISION}/ratings`);
+    expect(all.body.data.pagination).toEqual({ page: 1, limit: 20, total: 2, totalPages: 1 });
+    const page2 = await api(tokenFor, ASHA, 'get', `/workshops/${PRECISION}/ratings?limit=1&page=2`);
+    expect(page2.body.data.ratings.map((r: { review: string }) => r.review)).toEqual(['first']);
+    expect(page2.body.data.workshop).toMatchObject({ id: PRECISION, ratingCount: 27 });
+    for (const q of ['limit=0', 'limit=101', 'page=0', 'sort=score']) {
+      expect((await api(tokenFor, ASHA, 'get', `/workshops/${PRECISION}/ratings?${q}`)).status).toBe(400);
+    }
+  });
 });

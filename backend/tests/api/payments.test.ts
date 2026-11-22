@@ -143,14 +143,16 @@ describe('simulate result (mock gateway)', () => {
     expect(flip.body.message).toBe('Only PENDING payments can be processed (this payment is FAILED)');
   });
 
-  it('a pending payment on a CANCELLED order can only fail', async () => {
+  it('B3: cancellation fails a pending payment; it can no longer succeed', async () => {
     const orderId = await awardedOrder(tokenFor);
     const id = (await pay(orderId, 100)).body.data.payment.id;
     await api(tokenFor, ASHA, 'post', `/orders/${orderId}/cancel`, { reason: 'Not needed' });
     const res = await simulate(id, 'SUCCEEDED');
     expect(res.status).toBe(409);
-    expect(res.body.message).toBe('The order is CANCELLED; this payment can only be marked FAILED');
-    expect((await simulate(id, 'FAILED')).status).toBe(200);
+    expect(res.body.message).toBe('Only PENDING payments can be processed (this payment is FAILED)');
+    const again = await simulate(id, 'FAILED');
+    expect(again.status).toBe(200);
+    expect(again.body.data.changed).toBe(false);
   });
 
   it('validation and access: bad outcome 400; workshop 403; another buyer and unknown payment 404', async () => {
@@ -177,7 +179,15 @@ describe('list', () => {
       const res = await list(orderId, as);
       expect(res.status).toBe(200);
       expect(res.body.data.payments.map((p: { amount: string }) => p.amount)).toEqual(['50.50', '100.00']);
-      expect(res.body.data.summary).toEqual({ agreedPrice: '12500.50', paid: '100.00', pending: '50.50', remaining: '12350.00', simulated: true });
+      expect(res.body.data.summary).toEqual({
+        agreedPrice: '12500.50',
+        paid: '100.00',
+        pending: '50.50',
+        remaining: '12350.00',
+        refunded: '0.00',
+        refundDue: '0.00',
+        simulated: true,
+      });
     }
     expect((await list(orderId, VIKRAM)).status).toBe(404);
     expect((await list(orderId, owner(MUMBAI))).status).toBe(404);

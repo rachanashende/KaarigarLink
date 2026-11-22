@@ -72,7 +72,9 @@ describe('create', () => {
     const pending = await milestone(orderId);
     const res = await inspect(tokenFor, orderId, 'REWORK_REQUIRED', 'Redo');
     expect(res.status).toBe(409);
-    expect(res.body.message).toBe('REWORK_REQUIRED needs an IN_PROGRESS or COMPLETED milestone to send back for rework');
+    expect(res.body.message).toBe(
+      'No IN_PROGRESS or COMPLETED milestone to send back; pass milestoneId to choose one (an APPROVED milestone can be reopened)',
+    );
     expect(await prisma.inspection.count({ where: { orderId } })).toBe(0);
     expect((await prisma.milestone.findUniqueOrThrow({ where: { id: pending } })).status).toBe('PENDING');
   });

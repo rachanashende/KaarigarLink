@@ -321,9 +321,11 @@ describe('GET /api/orders/:orderId', () => {
     }
   });
 
-  it('inspector and admin roles get 403 (not part of I4); no token 401; unknown id 404', async () => {
+  it('admin 403; an unassigned inspector 404 (B1: only the assigned inspector reads it); no token 401; unknown id 404', async () => {
     const id = await awardedOrderId();
-    expect((await getOrder(id, INSPECTOR)).status).toBe(403);
+    const res = await getOrder(id, INSPECTOR);
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Order not found');
     expect((await getOrder(id, 'seed-user-admin')).status).toBe(403);
     expect((await request(app).get(`/api/orders/${id}`)).status).toBe(401);
     expect((await getOrder('does-not-exist', ASHA)).status).toBe(404);

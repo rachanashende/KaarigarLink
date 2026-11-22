@@ -155,3 +155,32 @@ describe('runSeed', () => {
     expect(user.role).toBe('BUYER');
   });
 });
+
+describe('reseeding and sessions (M13 token version)', () => {
+  beforeAll(async () => {
+    await resetDatabase();
+    await runSeed(prisma, { password: SEED_PASSWORD, now: NOW });
+  });
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  const loginAsha = () => request(app).post('/api/auth/login').send({ email: 'asha.rao@kaarigarlink.test', password: SEED_PASSWORD });
+
+  it('an unchanged reseed keeps passwords and sessions', async () => {
+    const token = (await loginAsha()).body.data.token as string;
+    await runSeed(prisma, { password: SEED_PASSWORD, now: NOW });
+    expect((await request(app).get('/api/auth/me').set('Authorization', 'Bearer ' + token)).status).toBe(200);
+  });
+
+  it('a reseed that resets a changed password also ends that account\'s earlier sessions', async () => {
+    const token = (await loginAsha()).body.data.token as string;
+    const changed = await request(app).patch('/api/auth/me/password').set('Authorization', 'Bearer ' + token).send({ currentPassword: SEED_PASSWORD, newPassword: 'Changed-Passw0rd' });
+    expect(changed.status).toBe(200);
+    const afterChange = changed.body.data.token as string;
+
+    await runSeed(prisma, { password: SEED_PASSWORD, now: NOW }); // resets the seed password
+    expect((await request(app).get('/api/auth/me').set('Authorization', 'Bearer ' + afterChange)).status).toBe(401);
+    expect((await loginAsha()).status).toBe(200);
+  });
+});
