@@ -127,7 +127,8 @@ export async function runSeed(prisma: PrismaClient, options: SeedOptions): Promi
             email: u.email,
             role: u.role,
             phone: u.phone ?? null,
-            ...(!keepHash && { passwordHash }),
+            // A reset password also ends that account's existing sessions (M13 token version).
+            ...(!keepHash && { passwordHash, tokenVersion: { increment: 1 } }),
           },
         });
         summary.users += 1;

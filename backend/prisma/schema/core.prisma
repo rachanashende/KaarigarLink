@@ -109,6 +109,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// M12: when the password was last changed (informational).
+  passwordChangedAt DateTime?
+  /// M13: session version. Every JWT carries it ("tv"); a password change increments it,
+  /// so all earlier tokens are rejected immediately, even within the same second.
+  tokenVersion      Int       @default(0)
+
   workshop Workshop?
   jobs     Job[]     @relation("BuyerJobs")
 
@@ -118,6 +124,14 @@ model User {
   ordersAsBuyer Order[]      @relation("BuyerOrders")
   inspections   Inspection[]
   ratingsGiven  Rating[]     @relation("BuyerRatings")
+
+  inspectorAssignments InspectorAssignment[] @relation("AssignedInspector")
+  assignmentsMade      InspectorAssignment[] @relation("AssignmentCreatedBy")
+  assignmentsEnded     InspectorAssignment[] @relation("AssignmentEndedBy")
+  paymentsRefunded     Payment[]             @relation("PaymentRefundedBy")
+  inspectionDrafts     InspectionDraft[]     @relation("InspectionDraftAuthor")
+  documentsUploaded    Document[]            @relation("DocumentUploader")
+  notifications        Notification[]        @relation("NotificationRecipient")
 
   @@index([role])
 }
@@ -234,6 +248,7 @@ model Job {
   updatedAt               DateTime             @updatedAt
 
   buyer        User             @relation("BuyerJobs", fields: [buyerId], references: [id], onDelete: Cascade)
+  documents    Document[]
   requirements JobRequirement[]
   invitations  JobInvitation[]
 

@@ -81,6 +81,9 @@ model Order {
   inspections Inspection[]
   payments    Payment[]
   rating      Rating?
+  inspectorAssignments InspectorAssignment[]
+  inspectionDrafts     InspectionDraft[]
+  documents            Document[]
 
   @@index([buyerId])
   @@index([workshopId])
@@ -101,7 +104,8 @@ model Milestone {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inspections Inspection[]
 
   @@unique([orderId, sequence])
   @@index([orderId, status])
@@ -114,13 +118,67 @@ model Inspection {
   status      InspectionStatus
   findings    String?          @db.Text
   inspectedAt DateTime         @default(now())
+  /// B2: the milestone a REWORK_REQUIRED inspection sent back (null otherwise).
+  milestoneId String?
+  /// M11: structured checklist results { version, items[], rework? }. Null for inspections recorded before M11.
+  checklist   Json?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  inspector User  @relation(fields: [inspectorId], references: [id], onDelete: Restrict)
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inspector User       @relation(fields: [inspectorId], references: [id], onDelete: Restrict)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  documents Document[]
 
   @@index([orderId])
+  @@index([milestoneId])
+  @@index([inspectorId])
+}
+
+/// Which inspector is responsible for an order's QC (B1). Rows are never deleted:
+/// reassignment ends the current row (endedAt, endedById, active = null) and creates a new one.
+/// `active` is true for the current assignment and NULL once ended, so the unique
+/// (orderId, active) allows any number of ended rows but at most ONE active row per order.
+model InspectorAssignment {
+  id           String    @id @default(cuid())
+  orderId      String
+  inspectorId  String
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  active       Boolean?  @default(true)
+  endedAt      DateTime?
+  endedById    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  order      Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  inspector  User  @relation("AssignedInspector", fields: [inspectorId], references: [id], onDelete: Restrict)
+  assignedBy User  @relation("AssignmentCreatedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  endedBy    User? @relation("AssignmentEndedBy", fields: [endedById], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, active])
+  @@index([inspectorId, active])
+  @@index([orderId, assignedAt])
+}
+
+/// M11: an inspector's private, unsubmitted inspection for one order. Never an
+/// official inspection: it changes no order, milestone or completion state. One per
+/// (order, inspector); a reassigned inspector cannot read another inspector's draft.
+/// Submitting an inspection deletes the submitter's draft in the same transaction.
+model InspectionDraft {
+  id          String   @id @default(cuid())
+  orderId     String
+  inspectorId String
+  /// Same structure as Inspection.checklist.
+  checklist   Json
+  findings    String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inspector User  @relation("InspectionDraftAuthor", fields: [inspectorId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, inspectorId])
   @@index([inspectorId])
 }
 
@@ -133,10 +191,14 @@ model Payment {
   transactionRef String?       @unique
   description    String?
   paidAt         DateTime?
+  /// B3: set by the explicit (simulated) refund of a SUCCEEDED payment on a CANCELLED order.
+  refundedAt     DateTime?
+  refundedById   String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order      Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refundedBy User? @relation("PaymentRefundedBy", fields: [refundedById], references: [id], onDelete: Restrict)
 
   @@index([orderId, status])
 }
