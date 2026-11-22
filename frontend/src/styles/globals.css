@@ -135,6 +135,7 @@
   .kl-stagger > :nth-child(2) { animation-delay: 40ms; }
   .kl-stagger > :nth-child(3) { animation-delay: 80ms; }
   .kl-stagger > :nth-child(4) { animation-delay: 120ms; }
+  @media (max-width: 374px) { .kl-editorial { font-size: 2.5rem; } }
 }
 @keyframes kl-enter { from { opacity: .75; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes kl-backdrop { from { opacity: 0; } to { opacity: 1; } }

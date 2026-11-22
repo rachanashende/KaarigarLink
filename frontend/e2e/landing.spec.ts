@@ -47,6 +47,8 @@ for (const [role, deepLink] of [
 
 test('public mobile navigation preserves keyboard focus, anchors and responsive state', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 900 }); await page.goto('/');
+  // Raw key events do not auto-wait for the SPA to finish mounting.
+  await expect(page.getByRole('heading', { name: 'Where manufacturing meets opportunity.', exact: true })).toBeVisible();
   await page.keyboard.press('Tab'); await expect(page.getByRole('link', { name: 'Skip to content', exact: true })).toBeFocused();
   const trigger = page.getByRole('button', { name: 'Open public navigation' }); await trigger.click();
   const dialog = page.getByRole('dialog', { name: 'KaarigarLink navigation', exact: true });

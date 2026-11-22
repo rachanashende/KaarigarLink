@@ -4,6 +4,8 @@ test.beforeEach(async ({ page }) => { await page.clock.setFixedTime(new Date('20
 async function login(page: Page, role: string) {
   await page.goto('/login'); await page.getByRole('button', { name: role, exact: true }).click();
   await expect(page).toHaveURL('/' + role.toLowerCase() + '/dashboard');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByText(/^Loading /)).toHaveCount(0);
 }
 const screens = [
   ['Workshop', 'workshop-dashboard', '/workshop/dashboard', 'Workshop workspace'],

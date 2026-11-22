@@ -40,7 +40,7 @@ export function BuyerDashboard() {
         {attention.length ? attention.map(order => <div key={order.id} className="buyer-record"><div><Link to={'/buyer/orders/' + encodeURIComponent(order.id)}>{order.id}</Link><p>{order.qcStatus === 'REWORK' || order.status === 'REWORK' ? 'Inspector rework requested' : 'Awaiting quality inspection'}</p></div><span className="kl-micro">View tracking</span></div>) : <p>No orders awaiting QC or marked for rework. <Link className="text-primary underline" to="/buyer/orders">View all orders</Link>.</p>}
       </section>
     </div>
-    <section aria-labelledby="recent-jobs" className="mb-8">
+    <section aria-label="Recent job overview" className="mb-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 id="recent-jobs" className="text-lg font-semibold">Recent manufacturing jobs</h2><Link className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline" to="/buyer/jobs">View all jobs</Link></div>
       {data.jobs.length ? <JobsTable quotes={data.quotes} jobs={filterJobs(data.jobs, '', 'all', 'newest').slice(0, 5)} caption="Recent manufacturing jobs" /> : <EmptyState title="Post your first manufacturing job" description="Describe the work, material and delivery requirements. Your job will appear here after posting." action={action} />}
     </section>

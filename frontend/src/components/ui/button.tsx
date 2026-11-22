@@ -8,7 +8,11 @@ const variants = cva('kl-button inline-flex min-h-11 items-center justify-center
   defaultVariants: { variant: 'default' },
 });
 
-export function Button({ className, variant, asChild = false, type = 'button', ...props }: ComponentProps<'button'> & VariantProps<typeof variants> & { asChild?: boolean }) {
+export function Button({ className, variant, asChild = false, type = 'button', onClick, ...props }: ComponentProps<'button'> & VariantProps<typeof variants> & { asChild?: boolean }) {
   const Component = asChild ? Slot : 'button';
-  return <Component {...(!asChild ? { type } : {})} className={cn(variants({ variant }), className)} {...props} />;
+  return <Component {...(!asChild ? { type } : {})} className={cn(variants({ variant }), className)} {...props} onClick={event => {
+    // Safari does not focus pointer-clicked buttons; native dialogs need a focused opener to restore.
+    event.currentTarget.focus({ preventScroll: true });
+    onClick?.(event);
+  }} />;
 }

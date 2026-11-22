@@ -28,7 +28,9 @@ npm run build
 npm run test:e2e -- --workers=2
 ```
 
-Install the Playwright Chromium browser with `npx playwright install chromium` if it is not already available. The existing Playwright configuration starts the development server on port 5173. On Windows with script execution restrictions, use `npm.cmd` and `npx.cmd`.
+Install the Playwright engines with `npx playwright install chromium firefox webkit` if they are not already available. The default suite runs all three engines with two workers; use `npm run test:e2e -- --project=chromium` for Chromium-only reproduction. See [Phase 9D verification](docs/phase-9d-verification.md) for browser/accessibility coverage and remaining limits. Playwright starts an isolated development server on port 4175 for the existing persistent mock workflow tests. It does not reuse another development server; Firefox and WebKit each run one worker to limit browser/diagnostic contention on Windows. On Windows with script execution restrictions, use `npm.cmd` and `npx.cmd`.
+
+The Playwright test toolchain is pinned to `@playwright/test@1.64.1` because the 1.65.x Firefox ARIA-reflection regression crashes otherwise valid axe/label queries. Keep its matching browser binaries installed; the minimal compatibility regression guards future upgrades. See the [Firefox follow-up](docs/phase-9d-verification.md) for the reproduction, upstream issue and actual checks.
 
 Tests stay colocated with source under `frontend/src/`, with browser tests in `frontend/e2e/`. Preserve package lockfiles and use `npm ci` for reproducible installs. Generated caches, dependencies, builds, browser reports, and local environments are ignored.
 

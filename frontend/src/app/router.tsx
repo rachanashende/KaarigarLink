@@ -64,7 +64,7 @@ function RouteFocus() {
 export function AppRoutes() {
   const { pathname } = useLocation();
   return <>
-    {pathname !== "/foundation" && <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-card focus:p-3">Skip to content</a>}
+    {pathname !== "/foundation" && <a href="#main" tabIndex={0} className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-card focus:p-3">Skip to content</a>}
     <RouteFocus />
     <Routes>
       <Route path="/" element={<HomeRedirect />} />

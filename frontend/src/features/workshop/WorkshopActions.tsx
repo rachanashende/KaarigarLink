@@ -107,7 +107,7 @@ export function WorkshopQuoteActions({ row }: { row: WorkshopQuotationData }) {
     finally { locked.current = false; }
   }
   const blocked = Boolean(services.demo?.warning);
-  return <div aria-label={'Commands for ' + row.quote.id} className="min-w-56 space-y-3">
+  return <div role="group" aria-label={'Commands for ' + row.quote.id} className="min-w-56 space-y-3">
     <div className="flex flex-wrap gap-3"><Button variant="outline" disabled={blocked || !row.actions.edit || editing} onClick={() => { setFeedback(''); setEditing(true); }}>Edit quote</Button><Button variant="outline" disabled={blocked || !row.actions.withdraw || mutation.isPending} onClick={() => { mutation.reset(); setExpected(terms(row.quote)); }}>Withdraw quote</Button></div>
     {row.actions.reason && <p className="text-xs text-muted-foreground">{row.actions.reason}</p>}
     {feedback && <p role="status" className="text-sm">{feedback}</p>}
