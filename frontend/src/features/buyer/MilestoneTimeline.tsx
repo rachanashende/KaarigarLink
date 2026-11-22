@@ -1,17 +1,19 @@
 import { Check, Circle, Clock3 } from 'lucide-react';
 import type { Order } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
+import { useServices } from '@/app/services';
 import { dateLabel } from './model';
 import { milestoneLabel } from './orderModel';
 
 export function MilestoneTimeline({ order }: { order: Order }) {
+  const live = !useServices().demo;
   return <section aria-labelledby="production-timeline" className="rounded-lg border bg-card p-5 sm:p-6">
     <h2 id="production-timeline" className="text-lg font-semibold">Production milestones</h2>
-    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Workshop updates · equal weight per completed milestone. Buyers have read-only access.</p>
+    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Workshop updates · equal weight per completed milestone. {live ? 'You approve completed milestones under Order actions.' : 'Buyers have read-only access.'}</p>
     {!order.milestones.length ? <p className="mt-6 text-sm text-muted-foreground">No milestones recorded. Progress is unavailable.</p> :
     <ol className="mt-7">{order.milestones.map((milestone, index) => {
       const label = milestoneLabel(milestone, order.status === 'CANCELLED');
-      const completed = milestone.status === 'COMPLETED';
+      const completed = milestone.status === 'COMPLETED' && milestone.stage !== 'COMPLETED';
       const Icon = completed ? Check : milestone.status === 'IN_PROGRESS' ? Clock3 : Circle;
       return <li key={milestone.id} className="relative flex gap-4 pb-7 last:pb-0">
         {index < order.milestones.length - 1 && <span aria-hidden="true" className="absolute top-8 bottom-0 left-3.5 border-l" />}

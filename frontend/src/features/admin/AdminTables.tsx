@@ -5,12 +5,13 @@ import { StatusBadge } from '@/components/StatusBadge';
 import type { AdminOverview } from '@/services/admin';
 import type { Inspection, Job, Order, User, Workshop } from '@/types';
 import { dateLabel, moneyLabel, progress, statusLabel } from './model';
+import { placeLabel } from '@/components/utils';
 
 export function RecordLink({ section, id, children }: { section: string; id: string; children?: ReactNode }) {
   return <Link className="block min-h-11 w-fit max-w-full break-words py-2.5 font-medium text-primary hover:underline" to={'/admin/' + section + '/' + encodeURIComponent(id)}>{children ?? id}</Link>;
 }
 export function AdminBadge({ status }: { status: string }) {
-  return <StatusBadge tone={status === 'REWORK' || status === 'REJECTED' ? 'danger' : status === 'PENDING' || status === 'QC_PENDING' ? 'warning' : status === 'IN_PRODUCTION' || status === 'AWARDED' ? 'info' : 'neutral'}>{statusLabel(status)}</StatusBadge>;
+  return <StatusBadge tone={status === 'REWORK' || status === 'FAILED' || status === 'REJECTED' ? 'danger' : status === 'PENDING' || status === 'QC_PENDING' ? 'warning' : status === 'IN_PRODUCTION' || status === 'AWARDED' ? 'info' : 'neutral'}>{statusLabel(status)}</StatusBadge>;
 }
 export function ProductionProgress({ order }: { order: Order }) {
   const value = progress(order.milestones);
@@ -26,7 +27,7 @@ export function UsersTable({ rows, data }: { rows: User[]; data: AdminOverview }
 }
 export function WorkshopsTable({ rows, data }: { rows: Workshop[]; data: AdminOverview }) {
   return <DataTable caption="Platform workshops" rows={rows} rowKey={item => item.id} columns={[
-    { key: 'name', header: 'Workshop / location', cell: item => <div className="min-w-48"><RecordLink section="workshops" id={item.id}>{item.name}</RecordLink><p className="text-xs text-muted-foreground">{item.location.city}, {item.location.state}</p></div> },
+    { key: 'name', header: 'Workshop / location', cell: item => <div className="min-w-48"><RecordLink section="workshops" id={item.id}>{item.name}</RecordLink><p className="text-xs text-muted-foreground">{placeLabel(item.location)}</p></div> },
     { key: 'capability', header: 'Capabilities / machinery', cell: item => <div className="min-w-48"><p>{item.capabilities.join(', ') || 'Not provided'}</p><p className="mt-2 text-xs text-muted-foreground">{item.machines.map(machine => machine.name).join(', ') || 'No machinery provided'}</p></div> },
     { key: 'capacity', header: 'Published capacity', cell: item => <ul className="min-w-40 space-y-2 text-xs">{item.capacitySlots.length ? item.capacitySlots.map(slot => <li key={slot.id}>{slot.availableQuantity} {slot.unit}<span className="mt-1 block text-muted-foreground">{dateLabel(slot.startsOn)} – {dateLabel(slot.endsOn)}</span></li>) : <li>Not provided</li>}</ul> },
     { key: 'rating', header: 'Rating', cell: item => item.rating ?? 'Not recorded' },
@@ -38,7 +39,7 @@ export function JobsTable({ rows, data }: { rows: Job[]; data: AdminOverview }) 
     { key: 'job', header: 'Job / buyer', cell: item => <div className="min-w-56"><RecordLink section="jobs" id={item.id}>{item.title}</RecordLink><p className="text-xs text-muted-foreground">{item.id}</p><RecordLink section="users" id={item.buyerId}>{data.users.find(user => user.id === item.buyerId)!.name}</RecordLink></div> },
     { key: 'requirements', header: 'Capability / quantity', cell: item => <div className="min-w-36"><p>{item.capability}</p><p className="mt-2 text-xs text-muted-foreground">{item.quantity} {item.unit}</p></div> },
     { key: 'deadline', header: 'Deadline', cell: item => <span className="whitespace-nowrap">{dateLabel(item.deadline)}</span> },
-    { key: 'status', header: 'Status', cell: item => <AdminBadge status={item.status} /> },
+    { key: 'status', header: 'Status', cell: item => <AdminBadge status={item.backendStatus ?? item.status} /> },
     { key: 'activity', header: 'Marketplace activity', cell: item => <div className="min-w-32 text-xs"><p>{data.matches.filter(match => match.jobId === item.id).length} matches</p><p className="mt-2">{data.invitations.filter(invitation => invitation.jobId === item.id).length} invitations</p><p className="mt-2">{data.quotes.filter(quote => quote.jobId === item.id).length} quotations</p></div> },
   ]} />;
 }

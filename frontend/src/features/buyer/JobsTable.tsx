@@ -2,10 +2,10 @@ import { Link, useNavigate } from 'react-router';
 import type { Job } from '@/types';
 import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
-import { dateLabel, jobStatuses, quantityLabel } from './model';
+import { dateLabel, jobStatusLabel, quantityLabel } from './model';
 
 export function JobBadge({ job }: { job: Job }) {
-  return <StatusBadge tone={job.status === 'POSTED' || job.status === 'QUOTING' ? 'info' : 'neutral'}>{jobStatuses[job.status]}</StatusBadge>;
+  return <StatusBadge tone={job.status === 'POSTED' || job.status === 'QUOTING' ? 'info' : job.status === 'DRAFT' ? 'warning' : 'neutral'}>{jobStatusLabel(job)}</StatusBadge>;
 }
 export function JobsTable({ jobs, caption = 'Manufacturing jobs' }: { jobs: Job[]; caption?: string }) {
   const navigate = useNavigate();

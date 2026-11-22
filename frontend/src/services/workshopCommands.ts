@@ -10,8 +10,9 @@ export const quoteTermsSchema = z.strictObject({
 });
 const expectedTerms = quoteTermsSchema.extend({ notes: z.string().max(4000) });
 export const invitationResponseSchema = z.strictObject({ response: z.enum(['ACCEPTED', 'DECLINED']) });
-export const editQuoteSchema = z.strictObject({ expected: expectedTerms, changes: quoteTermsSchema });
-export const withdrawQuoteSchema = z.strictObject({ expected: expectedTerms });
+/** version: live mode only, the quote version last read (stale -> CONFLICT). */
+export const editQuoteSchema = z.strictObject({ expected: expectedTerms, changes: quoteTermsSchema, version: z.string().min(1).optional() });
+export const withdrawQuoteSchema = z.strictObject({ expected: expectedTerms, version: z.string().min(1).optional() });
 export type QuoteTerms = z.infer<typeof quoteTermsSchema>;
 export type InvitationResponse = z.infer<typeof invitationResponseSchema>;
 export type EditQuoteInput = z.infer<typeof editQuoteSchema>;

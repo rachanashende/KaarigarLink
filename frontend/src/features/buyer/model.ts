@@ -1,8 +1,13 @@
-import type { Job, JobStatus } from '@/types';
+import type { BackendJobStatus, Job, JobStatus } from '@/types';
 import type { BuyerDashboardData } from '@/services/jobs';
 import { todayInIndia } from '@/services/jobs';
 
-export const jobStatuses: Record<JobStatus, string> = { POSTED: 'Posted', QUOTING: 'Quoting', AWARDED: 'Awarded', CLOSED: 'Closed', CANCELLED: 'Cancelled' };
+export const jobStatuses: Record<JobStatus, string> = { DRAFT: 'Draft', POSTED: 'Posted', QUOTING: 'Quoting', AWARDED: 'Awarded', CLOSED: 'Closed', CANCELLED: 'Cancelled' };
+/** Exact backend job states (live mode). */
+export const backendJobStatuses: Record<BackendJobStatus, string> = {
+  DRAFT: 'Draft', OPEN: 'Open', MATCHED: 'Invitations sent', AWARDED: 'Awarded', IN_PROGRESS: 'In production', COMPLETED: 'Completed', CANCELLED: 'Cancelled',
+};
+export const jobStatusLabel = (job: Pick<Job, 'status' | 'backendStatus'>) => job.backendStatus ? backendJobStatuses[job.backendStatus] : jobStatuses[job.status];
 export function isActive(job: Job) { return job.status === 'POSTED' || job.status === 'QUOTING' || job.status === 'AWARDED'; }
 export function dashboardStats(data: BuyerDashboardData) {
   return {

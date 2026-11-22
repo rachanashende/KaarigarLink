@@ -1,7 +1,7 @@
 import type { InspectorInspectionData } from '@/services/inspections';
 import { todayInIndia } from '@/services/jobs';
 
-export const qcLabels = { PENDING: 'QC pending', ACCEPTED: 'Accepted', REWORK: 'Rework requested' };
+export const qcLabels = { PENDING: 'QC pending', ACCEPTED: 'Accepted', REWORK: 'Rework requested', FAILED: 'Failed' };
 export function followUpDate(item: InspectorInspectionData) {
   return item.inspection.decision === 'REWORK' ? item.inspection.reworkDeadline : item.inspection.dueOn;
 }

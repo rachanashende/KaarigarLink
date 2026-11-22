@@ -1,4 +1,16 @@
 import { WorkshopInvitationActions, WorkshopQuoteActions } from './WorkshopActions';
+import { WorkshopOrderActions } from './WorkshopOrderActions';
+import { WorkshopProfileEditor } from './WorkshopProfileEditor';
+import { AccountEditor } from '@/components/AccountEditor';
+import { DocumentList } from '@/components/DocumentList';
+import { OrderHistory } from '@/components/OrderHistory';
+import { useServices } from '@/app/services';
+
+/** Live mode only: account editing (mock mode keeps the read-only settings facts). */
+function LiveAccount() {
+  const { account } = useServices();
+  return account ? <AccountEditor /> : null;
+}
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { DataTable } from '@/components/DataTable';
@@ -10,6 +22,8 @@ import type { WorkshopSection } from '@/app/roles';
 import type { WorkshopInvitationData, WorkshopJob, WorkshopOrderData, WorkshopQuotationData, WorkshopWorkspace } from '@/services/workshop';
 import { dateLabel, moneyLabel, quantityLabel } from '@/features/buyer/model';
 import { OrderProgress } from '@/features/buyer/OrderProgress';
+import { placeLabel } from '@/components/utils';
+import { derivePaymentSummary, paymentStatusLabel } from '@/services/orders';
 
 function State({ value }: { value: string | undefined }) {
   return <StatusBadge tone={value === 'REWORK' ? 'warning' : 'neutral'}>{value?.replaceAll('_', ' ') ?? 'Not supplied'}</StatusBadge>;
@@ -21,15 +35,16 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return <dl className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-2 sm:p-6">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-2 break-words text-sm font-medium">{value}</dd></div>)}</dl>;
 }
 function JobDetails({ job }: { job: WorkshopJob }) {
-  return <Facts rows={[
+  return <><Facts rows={[
     ['Job', job.title], ['Job ID', job.id], ['Buyer ID', job.buyerId], ['Description', job.description],
     ['Quantity', quantityLabel(job)], ['Material', job.material], ['Specification', job.specification || 'Not supplied'],
     ['Processes', job.processes.join(', ') || 'Not supplied'], ['Delivery location', job.location.city + ', ' + job.location.state],
     ['Job deadline', dateLabel(job.deadline)], ['Job created', dateLabel(job.createdAt)],
     ['Buyer budget', job.budget === undefined ? 'Not supplied' : moneyLabel(job.budget)],
-  ]} />;
+  ]} /><DocumentList scope="job" id={job.id} title="Buyer design files" /></>;
 }
 function Quotes({ rows }: { rows: WorkshopQuotationData[] }) {
+  const live = !useServices().demo;
   return <DataTable caption="Workshop quotation history" rows={rows} rowKey={row => row.quote.id} emptyTitle="No quotations recorded" emptyDescription="No canonical quotations are assigned to this workshop." columns={[
     { key: 'id', header: 'Quote', cell: row => row.quote.id },
     { key: 'job', header: 'Job / buyer', cell: row => <div className="min-w-44"><p>{row.job.title}</p><p className="mt-2 text-xs text-muted-foreground">{row.buyer.name}</p></div> },
@@ -37,7 +52,7 @@ function Quotes({ rows }: { rows: WorkshopQuotationData[] }) {
     { key: 'date', header: 'Estimated delivery', cell: row => <span className="whitespace-nowrap">{dateLabel(row.quote.estimatedDelivery)}</span> },
     { key: 'status', header: 'Quotation status', cell: row => <State value={row.quote.status} /> },
     { key: 'notes', header: 'Notes', cell: row => <p className="min-w-52">{row.quote.notes || 'Not supplied'}</p> },
-    { key: 'commands', header: 'Local mock commands', cell: row => <WorkshopQuoteActions row={row} /> },
+    { key: 'commands', header: live ? 'Commands' : 'Local mock commands', cell: row => <WorkshopQuoteActions row={row} /> },
   ]} />;
 }
 function Invitations({ rows }: { rows: WorkshopInvitationData[] }) {
@@ -57,9 +72,19 @@ function Orders({ rows }: { rows: WorkshopOrderData[] }) {
     { key: 'state', header: 'Order lifecycle', cell: row => <State value={row.order.status} /> },
     { key: 'qc', header: 'QC summary', cell: row => <State value={row.order.qcStatus} /> },
     { key: 'progress', header: 'Milestone progress', cell: row => <OrderProgress milestones={row.order.milestones} /> },
-    { key: 'payment', header: 'Payment simulation', cell: row => row.payments.length ? row.payments.map(payment => <p key={payment.id}>{payment.simulationStatus}</p>) : 'No payment record supplied' },
+    { key: 'payment', header: 'Payments (simulated)', cell: row => <PaymentPosition row={row} compact /> },
   ]} />;
 }
+/** M13 (BUG-02): agreed price, paid, pending and remaining, the same figures the buyer sees. */
+function PaymentPosition({ row, compact = false }: { row: WorkshopOrderData; compact?: boolean }) {
+  const summary = derivePaymentSummary(row.order.agreedPrice, row.order.backendStatus, row.payments);
+  if (!summary) return <>{row.payments.length ? row.payments.map(item => paymentLabels[item.simulationStatus]).join(', ') : 'No payment record supplied'}</>;
+  const status = paymentStatusLabel(summary);
+  if (compact) return <div className="min-w-40"><p>{status}</p><p className="mt-1 text-xs text-muted-foreground tabular-nums">{moneyLabel(summary.paid)} of {moneyLabel(summary.agreedPrice)}</p></div>;
+  return <div className="space-y-1 tabular-nums"><p className="font-medium">{status}</p><p>Agreed {moneyLabel(summary.agreedPrice)} · Paid {moneyLabel(summary.paid)} · Pending {moneyLabel(summary.pending)} · Remaining {moneyLabel(summary.remaining)}</p>{summary.refunded > 0 && <p>Refunded {moneyLabel(summary.refunded)}</p>}{summary.refundDue > 0 && <p>Refund due {moneyLabel(summary.refundDue)}</p>}</div>;
+}
+const paymentLabels: Record<WorkshopOrderData['payments'][number]['simulationStatus'], string> = { PENDING: 'Pending', SIMULATED_PAID: 'Paid (simulated)', SIMULATED_FAILED: 'Failed (simulated)', SIMULATED_REFUNDED: 'Refunded (simulated)' };
+
 function OrderDetails({ row }: { row: WorkshopOrderData }) {
   return <div className="space-y-6">
     <Facts rows={[
@@ -67,15 +92,18 @@ function OrderDetails({ row }: { row: WorkshopOrderData }) {
       ['QC summary', <State value={row.order.qcStatus} />], ['Created', dateLabel(row.order.createdAt)],
       ['Awarded quotation', row.quote.id], ['Quoted total', moneyLabel(row.quote.amount)],
       ['Estimated delivery', dateLabel(row.quote.estimatedDelivery)],
-      ['Payment simulation', row.payments.length ? row.payments.map(item => item.simulationStatus).join(', ') : 'No payment record supplied'],
+      ['Payments (simulated)', <PaymentPosition row={row} />],
     ]} />
+    <WorkshopOrderActions row={row} />
+    <DocumentList scope="order" id={row.order.id} title="Inspection evidence" />
+    <OrderHistory orderId={row.order.id} />
     <JobDetails job={row.job} />
     <section aria-label="Production milestones" className="space-y-4">
       <h2 className="text-lg font-semibold">Production milestones</h2>
       <OrderProgress milestones={row.order.milestones} />
       <DataTable caption="Workshop production milestones" rows={row.order.milestones} rowKey={step => step.id} emptyTitle="No milestones recorded" emptyDescription="Progress is unavailable until a milestone plan is supplied." columns={[
         { key: 'title', header: 'Milestone', cell: step => step.title },
-        { key: 'state', header: 'Status', cell: step => <State value={step.status} /> },
+        { key: 'state', header: 'Status', cell: step => <State value={step.stage ?? step.status} /> },
         { key: 'due', header: 'Planned', cell: step => dateLabel(step.dueOn) },
         { key: 'completed', header: 'Completed', cell: step => dateLabel(step.completedAt) },
         { key: 'notes', header: 'Notes', cell: step => step.notes ?? 'Not supplied' },
@@ -113,13 +141,14 @@ export function WorkshopRecords({ data, section, invitationId, orderId }: { data
     return row ? <OrderDetails row={row} /> : <EmptyState title="Order unavailable" description="This order does not exist or is not assigned to your workshop." />;
   }
   if (section === 'profile' || section === 'onboarding') return <div className="space-y-6">
+    {section === 'profile' && <WorkshopProfileEditor />}
     {section === 'onboarding' && <Facts rows={[[ 'Onboarding status', 'Canonical profile linked' ], ['Profile ID', profile.id], ['Owner account ID', profile.ownerId]]} />}
-    <Facts rows={[[ 'Workshop', profile.name ], ['Profile ID', profile.id], ['Location', profile.location.city + ', ' + profile.location.state], ['Capabilities', profile.capabilities.join(', ') || 'Not supplied'], ['Rating', profile.rating === undefined ? 'Not supplied' : profile.rating]]} />
+    <Facts rows={[[ 'Workshop', profile.name ], ['Profile ID', profile.id], ['Location', placeLabel(profile.location)], ['Capabilities', profile.capabilities.join(', ') || 'Not supplied'], ['Rating', profile.rating === undefined ? 'Not supplied' : profile.rating], ['Verification', profile.verificationStatus ? <State value={profile.verificationStatus} /> : 'Not supplied']]} />
     <DataTable caption="Workshop machinery" rows={profile.machines} rowKey={machine => machine.id} emptyTitle="No machinery supplied" emptyDescription="No machines are recorded on this canonical profile." columns={[{ key: 'machine', header: 'Machine', cell: machine => machine.name }, { key: 'process', header: 'Process', cell: machine => machine.process }]} />
     <DataTable caption="Published workshop capacity" rows={profile.capacitySlots} rowKey={slot => slot.id} emptyTitle="No capacity supplied" emptyDescription="No published capacity windows are recorded." columns={[{ key: 'quantity', header: 'Available quantity', cell: slot => slot.availableQuantity.toLocaleString('en-IN') + ' ' + slot.unit }, { key: 'starts', header: 'Starts', cell: slot => dateLabel(slot.startsOn) }, { key: 'ends', header: 'Ends', cell: slot => dateLabel(slot.endsOn) }]} />
     <p className="text-sm text-muted-foreground">Published capacity is shown per source window and unit. Utilization and availability percentages are not supplied.</p>
   </div>;
-  if (section === 'settings') return <Facts rows={[[ 'Account', data.account.name ], ['Email', data.account.email], ['Account ID', data.account.id], ['Role', data.account.role], ['Workshop', profile.name], ['Workshop ID', profile.id], ['Notification preferences', 'Not supported by the shared contract']]} />;
+  if (section === 'settings') return <div className="space-y-6"><Facts rows={[[ 'Account', data.account.name ], ['Email', data.account.email], ['Account ID', data.account.id], ['Role', data.account.role], ['Workshop', profile.name], ['Workshop ID', profile.id], ['Notification preferences', 'Not supported by the shared contract']]} /><LiveAccount /></div>;
   if (section === 'dashboard') return <div className="space-y-6">
     <h2 className="text-lg font-semibold">{profile.name}</h2>
     <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">{[

@@ -18,7 +18,7 @@ export function AdminListPage({ section }: { section: AdminSection }) {
   if (query.isPending) return <>{header}<LoadingState label="Loading platform records…" /></>;
   if (query.isError) return <>{header}<ErrorState message={query.error.message} onRetry={() => { void query.refetch(); }} /></>;
   const data = query.data;
-  const choices = section === 'users' ? [...new Set(data.users.map(item => item.role))] : section === 'workshops' ? [...new Set(data.workshops.flatMap(item => item.capabilities))] : section === 'jobs' ? [...new Set(data.jobs.map(item => item.status))] : section === 'orders' ? [...new Set(data.orders.map(item => item.status))] : ['PENDING', 'ACCEPTED', 'REWORK', 'overdue'];
+  const choices = section === 'users' ? [...new Set(data.users.map(item => item.role))] : section === 'workshops' ? [...new Set(data.workshops.flatMap(item => item.capabilities))] : section === 'jobs' ? [...new Set(data.jobs.map(item => item.status))] : section === 'orders' ? [...new Set(data.orders.map(item => item.status))] : ['PENDING', 'ACCEPTED', 'REWORK', 'FAILED', 'overdue'];
   const filterLabel = section === 'users' ? 'Role' : section === 'workshops' ? 'Capability' : section === 'quality' ? 'QC status' : 'Lifecycle status';
   const total = section === 'quality' ? data.inspections.length : data[section].length;
   let count = 0; let table;

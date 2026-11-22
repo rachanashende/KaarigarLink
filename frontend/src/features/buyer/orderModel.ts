@@ -10,6 +10,10 @@ export function milestoneProgress(milestones: Milestone[]): number | null {
   return milestones.length ? Math.round(milestones.filter(milestone => milestone.status === 'COMPLETED').length / milestones.length * 100) : null;
 }
 export function milestoneLabel(milestone: Milestone, cancelled = false, today = todayInIndia()) {
+  // Live mode keeps the exact backend stage: approval and rework are distinct states.
+  if (milestone.stage === 'APPROVED') return 'Approved';
+  if (milestone.stage === 'COMPLETED') return 'Completed · awaiting buyer approval';
+  if (milestone.stage === 'REWORK_REQUIRED' && !cancelled) return 'Rework required';
   if (milestone.status === 'COMPLETED') return 'Completed';
   if (cancelled) return 'Not completed · order cancelled';
   const delayed = milestone.dueOn < today;

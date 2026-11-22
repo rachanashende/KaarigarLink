@@ -57,7 +57,7 @@ export function createMockAdmin(store: MockStore): AdminService {
             const common = { id: record.id, inspectorId: record.inspectorId, submittedAt: record.submittedAt, findings: {
               summary: record.findings.summary, items: record.findings.items.map(({ id, result, notes }) => ({ id, result, notes, evidence: [] })),
             } };
-            return record.decision === 'ACCEPTED' ? { ...common, decision: 'ACCEPTED' as const } : { ...common, decision: 'REWORK' as const, reason: record.reason, correctiveAction: record.correctiveAction, reworkDeadline: record.reworkDeadline };
+            return record.decision === 'ACCEPTED' ? { ...common, decision: 'ACCEPTED' as const } : record.decision === 'FAILED' ? { ...common, decision: 'FAILED' as const } : { ...common, decision: 'REWORK' as const, reason: record.reason, correctiveAction: record.correctiveAction, reworkDeadline: record.reworkDeadline };
           }),
         })),
         quotes: quotes.map(({ id, jobId, workshopId, amount, estimatedDelivery, notes, status }) => ({ id, jobId, workshopId, amount, estimatedDelivery, notes, status })),

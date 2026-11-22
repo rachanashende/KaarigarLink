@@ -8,6 +8,10 @@ import { useAdminOverview } from './queries';
 import { sectionTitles, dateLabel, moneyLabel, statusLabel, operationalAlerts, type AdminSection } from './model';
 import { AdminBadge, JobsTable, OrdersTable, QualityTable, RecordLink, ProductionProgress } from './AdminTables';
 import { OperationalAlerts } from './OperationalAlerts';
+import { InspectorAssignment, WorkshopVerification } from './AdminCommands';
+import { DocumentList } from '@/components/DocumentList';
+import { OrderHistory } from '@/components/OrderHistory';
+import { placeLabel } from '@/components/utils';
 
 function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return <dl className="grid gap-5 text-sm sm:grid-cols-2">{rows.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-2 break-words leading-relaxed">{value}</dd></div>)}</dl>;
@@ -43,13 +47,14 @@ export function AdminDetailPage({ section }: { section: AdminSection }) {
     title = workshop.name;
     const jobIds = new Set([...data.matches, ...data.invitations, ...data.quotes, ...data.orders].filter(item => item.workshopId === id).map(item => item.jobId));
     content = <div className="space-y-6"><Section title="Published workshop profile"><Facts rows={[
-      ['Workshop ID', id], ['Location', workshop.location.city + ', ' + workshop.location.state],
+      ['Workshop ID', id], ['Location', placeLabel(workshop.location)],
       ['Owner', <RecordLink section="users" id={workshop.ownerId}>{data.users.find(user => user.id === workshop.ownerId)!.name}</RecordLink>],
       ['Capabilities', workshop.capabilities.join(', ') || 'Not provided'], ['Rating', workshop.rating ?? 'Not recorded'],
-      ['Verification status', 'Not supplied; no verification or suspension command exists'],
+      ['Verification status', workshop.verificationStatus ? statusLabel(workshop.verificationStatus) : 'Not supplied; no verification or suspension command exists'],
       ['Machinery', workshop.machines.length ? <ul className="space-y-2">{workshop.machines.map(machine => <li key={machine.id}>{machine.name} · {machine.process}</li>)}</ul> : 'Not provided'],
       ['Published capacity', workshop.capacitySlots.length ? <ul className="space-y-2">{workshop.capacitySlots.map(slot => <li key={slot.id}>{slot.availableQuantity} {slot.unit} · {dateLabel(slot.startsOn)} – {dateLabel(slot.endsOn)}</li>)}</ul> : 'Not provided'],
     ]} /></Section>
+      <WorkshopVerification workshop={workshop} />
       <Section title="Related jobs and marketplace activity"><JobsTable rows={data.jobs.filter(job => jobIds.has(job.id))} data={data} /></Section>
       <Section title="Workshop orders"><OrdersTable rows={data.orders.filter(order => order.workshopId === id)} data={data} /></Section>
       <OperationalAlerts alerts={alerts.filter(alert => alert.workshopId === id)} />
@@ -60,12 +65,12 @@ export function AdminDetailPage({ section }: { section: AdminSection }) {
     title = job.title;
     content = <div className="space-y-6"><Section title="Manufacturing brief"><Facts rows={[
       ['Job ID', id], ['Buyer', <RecordLink section="users" id={job.buyerId}>{data.users.find(user => user.id === job.buyerId)!.name}</RecordLink>],
-      ['Lifecycle status', <AdminBadge status={job.status} />], ['Capability', job.capability], ['Quantity', job.quantity + ' ' + job.unit],
+      ['Lifecycle status', <AdminBadge status={job.backendStatus ?? job.status} />], ['Capability', job.capability], ['Quantity', job.quantity + ' ' + job.unit],
       ['Material', job.material], ['Requirements', job.processes.join(', ')], ['Specification', job.specification || 'Not provided'],
       ['Description', job.description], ['Delivery deadline', dateLabel(job.deadline)], ['Created', dateLabel(job.createdAt)],
       ['Delivery location', job.location.city + ', ' + job.location.state],
     ]} /></Section>
-      <Section title="Matching records"><DataTable caption="Job match records" rows={data.matches.filter(item => item.jobId === id)} rowKey={item => item.workshopId} columns={[
+      <Section title={data.assignments ? 'Invitation match snapshots (scores stored when each invitation was sent)' : 'Matching records'}><DataTable caption="Job match records" rows={data.matches.filter(item => item.jobId === id)} rowKey={item => item.workshopId} columns={[
         { key: 'workshop', header: 'Workshop', cell: item => <RecordLink section="workshops" id={item.workshopId}>{data.workshops.find(workshop => workshop.id === item.workshopId)!.name}</RecordLink> },
         { key: 'score', header: 'Supplied score', cell: item => item.score },
         { key: 'eligibility', header: 'Eligibility / explanations', cell: item => <div className="min-w-56"><p>{item.eligibility.eligible ? 'Eligible match' : 'Ineligible match'}</p><ul className="mt-2 space-y-2 text-xs text-muted-foreground">{[...item.explanations, ...item.eligibility.reasons].map((reason, index) => <li key={index}>{reason}</li>)}</ul></div> },
@@ -97,7 +102,11 @@ export function AdminDetailPage({ section }: { section: AdminSection }) {
       ['Order value', moneyLabel(quote.amount)], ['Delivery commitment', dateLabel(quote.estimatedDelivery)], ['Created', dateLabel(order.createdAt)],
       ['Production progress', <ProductionProgress order={order} />], ['Quotation', quote.id], ['Commercial terms', quote.notes],
     ]} /></Section>
-      <Section title="Production milestones">{order.milestones.length ? <ol className="divide-y">{order.milestones.map(step => <li key={step.id} className="py-4"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-semibold">{step.title}</h3><AdminBadge status={step.status} /></div><p className="mt-3 text-xs text-muted-foreground">Planned {dateLabel(step.dueOn)} · Completed {dateLabel(step.completedAt)}</p><p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{step.notes ?? step.description ?? 'No supporting notes.'}</p></li>)}</ol> : <p className="text-sm text-muted-foreground">No production milestones recorded.</p>}<p className="mt-4 text-xs text-muted-foreground">Workshop-owned production data is read-only. Completion does not imply QC acceptance, payment or closure.</p></Section>
+      <InspectorAssignment order={order} data={data} />
+      <DocumentList scope="order" id={order.id} title="Inspection evidence" />
+      <DocumentList scope="job" id={order.jobId} title="Design files" />
+      <OrderHistory orderId={order.id} />
+      <Section title="Production milestones">{order.milestones.length ? <ol className="divide-y">{order.milestones.map(step => <li key={step.id} className="py-4"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-semibold">{step.title}</h3><AdminBadge status={step.stage ?? step.status} /></div><p className="mt-3 text-xs text-muted-foreground">Planned {dateLabel(step.dueOn)} · Completed {dateLabel(step.completedAt)}</p><p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">{step.notes ?? step.description ?? 'No supporting notes.'}</p></li>)}</ol> : <p className="text-sm text-muted-foreground">No production milestones recorded.</p>}<p className="mt-4 text-xs text-muted-foreground">Workshop-owned production data is read-only. Completion does not imply QC acceptance, payment or closure.</p></Section>
       <Section title="Related quality inspections"><QualityTable rows={inspections} data={data} /></Section>
       <OperationalAlerts alerts={alerts.filter(alert => alert.href === '/admin/orders/' + encodeURIComponent(id) || inspections.some(inspection => alert.href === '/admin/quality/' + encodeURIComponent(inspection.id)))} />
     </div>;

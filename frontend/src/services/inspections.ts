@@ -7,6 +7,8 @@ const text = z.string().trim().max(4000, 'Use no more than 4000 characters.');
 export const evidenceSchema = z.strictObject({
   id: z.string().min(1).max(200), name: z.string().trim().min(1).max(255), mediaType: z.string().min(1).max(255),
   sizeBytes: z.number().int().min(0).max(10 * 1024 * 1024, 'Each evidence file must be at most 10 MB.'),
+  /** Live mode only (M12): the uploaded document. */
+  documentId: z.string().min(1).optional(),
 });
 export const findingsSchema = z.strictObject({
   items: z.array(z.strictObject({
@@ -17,23 +19,30 @@ export const findingsSchema = z.strictObject({
 });
 export const decisionSchema = z.discriminatedUnion('decision', [
   z.strictObject({ decision: z.literal('ACCEPTED'), findings: findingsSchema }),
+  z.strictObject({ decision: z.literal('FAILED'), findings: findingsSchema }),
   z.strictObject({
     decision: z.literal('REWORK'), findings: findingsSchema,
     reason: text.min(10, 'Describe the rework reason in at least 10 characters.'),
     correctiveAction: text.min(10, 'Describe corrective actions in at least 10 characters.'),
     reworkDeadline: z.iso.date({ error: 'Enter a valid rework deadline.' }).refine(date => date > todayInIndia(), 'Rework deadline must be a future date (India time).'),
+    /** Live mode only: the milestone to send back (any started one, including APPROVED). */
+    milestoneId: z.string().min(1).optional(),
   }),
 ]);
 export type QCDecisionInput = z.infer<typeof decisionSchema>;
 export interface InspectorInspectionData {
   inspection: Inspection; order: Order; job: Job; workshop: Workshop; buyer: User; inspector: User;
   canDecide: boolean; decisionReason: string; activity: AuditEvent[];
+  /** Live mode only: started milestones a rework request can target. */
+  reworkTargets?: { id: string; label: string }[];
 }
 export interface InspectorService {
   listInspections(inspectorId: string): Promise<InspectorInspectionData[]>;
   getInspection(inspectorId: string, inspectionId: string): Promise<InspectorInspectionData>;
   saveDraft(inspectorId: string, inspectionId: string, findings: InspectionFindings): Promise<Inspection>;
   submitDecision(inspectorId: string, inspectionId: string, input: QCDecisionInput): Promise<Inspection>;
+  /** Live mode only: delete the saved server draft. */
+  deleteDraft?(inspectorId: string, inspectionId: string): Promise<void>;
 }
 
 export function validateChecks(inspection: Inspection, findings: InspectionFindings, decision?: QCDecisionInput['decision']) {
@@ -49,4 +58,5 @@ export function validateChecks(inspection: Inspection, findings: InspectionFindi
   }
   if (decision === 'ACCEPTED' && findings.items.some(item => item.result === 'FAIL')) throw new ServiceError('VALIDATION', 'Acceptance cannot contain failed findings.');
   if (decision === 'REWORK' && !findings.items.some(item => item.result === 'FAIL')) throw new ServiceError('VALIDATION', 'Record at least one failed checklist finding for rework.');
+  if (decision === 'FAILED' && !findings.items.some(item => item.result === 'FAIL')) throw new ServiceError('VALIDATION', 'Record at least one failed checklist finding to fail the inspection.');
 }

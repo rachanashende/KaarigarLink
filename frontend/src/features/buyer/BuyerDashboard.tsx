@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState } from '@/components/feedback';
 import { useAuth } from '@/features/auth/context';
 import { useBuyerDashboard } from './queries';
+import { useServices } from '@/app/services';
 import { dashboardStats, dateLabel, filterJobs, jobStatuses, upcomingJobs } from './model';
 import { JobsTable } from './JobsTable';
 import { BuyerLoading } from './BuyerLoading';
@@ -13,6 +14,7 @@ import { BuyerLoading } from './BuyerLoading';
 export function BuyerDashboard() {
   const { user } = useAuth();
   const query = useBuyerDashboard();
+  const services = useServices();
   const action = <Button asChild><Link to="/buyer/jobs/new"><Plus aria-hidden="true" className="size-4" />Post a job</Link></Button>;
   const header = <PageHeader title="Buyer workspace" description={'Welcome back, ' + user?.name.split(' ')[0] + '. Keep your manufacturing requirements in view.'} action={action} />;
   if (query.isPending) return <>{header}<BuyerLoading /></>;
@@ -48,7 +50,7 @@ export function BuyerDashboard() {
       </section>
     </div>
     <section aria-labelledby="recent-activity" className="mt-8 rounded-lg border bg-card p-6">
-      <h2 id="recent-activity" className="text-lg font-semibold">Recent activity</h2>
+      <h2 id="recent-activity" className="text-lg font-semibold">Recent activity</h2>{!services.demo && <p className="mt-1 text-xs text-muted-foreground">Derived from record dates (jobs posted, orders created). Not an audit log.</p>}
       {activity.length ? <ul className="mt-4 divide-y">{activity.map(event => {
         const job = data.jobs.find(job => job.id === event.entityId);
         return <li key={event.id} className="flex flex-wrap justify-between gap-2 py-4 text-sm"><div><p className="font-medium">{event.action === 'JOB_POSTED' ? 'Manufacturing job posted' : event.action.replaceAll('_', ' ').toLowerCase()}</p>{job ? <Link className="mt-1 inline-flex min-h-11 items-center text-primary hover:underline" to={'/buyer/jobs/' + encodeURIComponent(job.id)}>{job.title}</Link> : <p className="mt-2 text-muted-foreground">Related order activity</p>}</div><time dateTime={event.occurredAt} className="text-xs text-muted-foreground">{dateLabel(event.occurredAt)}</time></li>;

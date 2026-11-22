@@ -8,6 +8,7 @@ import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState, ErrorState } from '@/components/feedback';
 import { useBuyerQuotes } from './queries';
+import { useServices } from '@/app/services';
 import { BuyerLoading } from './BuyerLoading';
 import { JobWorkspaceNav } from './JobWorkspaceNav';
 import { WorkshopDetails } from './WorkshopDetails';
@@ -15,6 +16,7 @@ import { QuoteDetailsDialog, AwardReviewDialog } from './QuoteDialogs';
 import { dateLabel, moneyLabel } from './model';
 import { sortQuotes, quoteLabels, type QuoteSort } from './quoteModel';
 import { jobControlClass } from './JobField';
+import { placeLabel } from '@/components/utils';
 
 export function QuotesPage() {
   const { id = '' } = useParams();
@@ -24,6 +26,7 @@ export function QuotesPage() {
   return <QuotesWorkspace key={query.data.job.id} data={query.data} />;
 }
 function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
+  const { demo } = useServices();
   const [sort, setSort] = useState<QuoteSort>('amount');
   const [selection, setSelection] = useState<string[]>([]);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -34,7 +37,7 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
   const details = data.quotations.find(entry => entry.quote.id === detailsId) ?? null;
   const review = data.quotations.find(entry => entry.quote.id === reviewId) ?? null;
   return <>
-    <PageHeader title="Compare quotations" description={data.job.title} action={<StatusBadge tone="warning">Demo quotations</StatusBadge>} />
+    <PageHeader title="Compare quotations" description={data.job.title} action={demo ? <StatusBadge tone="warning">Demo quotations</StatusBadge> : undefined} />
     <JobWorkspaceNav jobId={data.job.id} />
     <div className="mb-6 rounded-lg border border-accent bg-accent/10 p-4 text-sm leading-relaxed">{data.awardBlocker}</div>
     {!rows.length ? <EmptyState title="No quotations yet" description="Invite eligible workshops to review this brief. Quotations will appear here when available." action={<Button asChild variant="outline"><Link to={'/buyer/jobs/' + encodeURIComponent(data.job.id) + '/matches'}>View workshop matches</Link></Button>} /> : <>
@@ -51,7 +54,7 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
           const current = previous.filter(id => data.quotations.some(item => item.quote.id === id));
           return checked ? [...current, entry.quote.id] : current.filter(id => id !== entry.quote.id);
         }); }} /><span className="sr-only">{'Compare quotation ' + entry.quote.id + ' from ' + entry.workshop.name}</span></label> },
-        { key: 'workshop', header: 'Workshop', cell: entry => <div className="min-w-40 max-w-60"><button className="min-h-11 text-left font-semibold text-primary hover:underline" onClick={() => setWorkshop(entry.workshop)}>{entry.workshop.name}</button><p className="mt-1 text-xs text-muted-foreground">{entry.workshop.location.city}, {entry.workshop.location.state}</p></div> },
+        { key: 'workshop', header: 'Workshop', cell: entry => <div className="min-w-40 max-w-60"><button className="min-h-11 text-left font-semibold text-primary hover:underline" onClick={() => setWorkshop(entry.workshop)}>{entry.workshop.name}</button><p className="mt-1 text-xs text-muted-foreground">{placeLabel(entry.workshop.location)}</p></div> },
         { key: 'amount', header: 'Amount (INR)', cell: entry => <span className="whitespace-nowrap font-semibold tabular-nums">{moneyLabel(entry.quote.amount)}</span> },
         { key: 'delivery', header: 'Delivery', cell: entry => <time className="whitespace-nowrap" dateTime={entry.quote.estimatedDelivery}>{dateLabel(entry.quote.estimatedDelivery)}</time> },
         { key: 'status', header: 'Status', cell: entry => <StatusBadge tone={entry.quote.status === 'SUBMITTED' ? 'info' : 'neutral'}>{quoteLabels[entry.quote.status]}</StatusBadge> },
@@ -61,7 +64,7 @@ function QuotesWorkspace({ data }: { data: BuyerQuotesData }) {
       {selected.length > 0 && <section id="quote-comparison" tabIndex={-1} aria-labelledby="comparison-heading" className="mt-8 scroll-mt-6">
         <h2 id="comparison-heading" className="mb-5 text-xl font-semibold">Selected quotation comparison</h2>
         <div className={selected.length === 1 ? 'grid max-w-xl gap-4' : selected.length === 2 ? 'grid items-stretch gap-4 md:grid-cols-2' : 'grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3'}>{selected.map(entry => <article key={entry.quote.id} aria-label={'Compare ' + entry.workshop.name} className="min-w-0 rounded-lg border bg-card p-5">
-          <h3 className="text-lg font-semibold">{entry.workshop.name}</h3><p className="mt-2 text-xs text-muted-foreground">{entry.workshop.location.city}, {entry.workshop.location.state}</p>
+          <h3 className="text-lg font-semibold">{entry.workshop.name}</h3><p className="mt-2 text-xs text-muted-foreground">{placeLabel(entry.workshop.location)}</p>
           <dl className="mt-5 divide-y text-sm">{[
             ['Amount (INR)', moneyLabel(entry.quote.amount)], ['Delivery', dateLabel(entry.quote.estimatedDelivery)],
             ['Status', quoteLabels[entry.quote.status]], ['Capabilities', entry.workshop.capabilities.join(', ')],

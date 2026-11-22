@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router';
+import { Factory } from 'lucide-react';
 import type { Role } from '@/types';
 import { useAuth } from '@/features/auth/context';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { RegisterPage } from '@/features/auth/RegisterPage';
 import { LoadingState, UnauthorizedState } from '@/components/feedback';
 import { Button } from '@/components/ui/button';
 import { AppShell } from './AppShell';
@@ -18,6 +20,7 @@ const MatchesPage = lazy(() => import('@/features/buyer/MatchesPage').then(modul
 const QuotesPage = lazy(() => import('@/features/buyer/QuotesPage').then(module => ({ default: module.QuotesPage })));
 
 const OrdersListPage = lazy(() => import('@/features/buyer/OrdersListPage').then(module => ({ default: module.OrdersListPage })));
+const BuyerProfilePage = lazy(() => import('@/features/buyer/BuyerProfilePage').then(module => ({ default: module.BuyerProfilePage })));
 const OrderDetailPage = lazy(() => import('@/features/buyer/OrderDetailPage').then(module => ({ default: module.OrderDetailPage })));
 
 const InspectorDashboard = lazy(() => import('@/features/inspector/InspectorDashboard').then(module => ({ default: module.InspectorDashboard })));
@@ -28,6 +31,8 @@ const WorkshopPage = lazy(() => import('@/features/workshop/WorkshopPage').then(
 
 const AdminDashboard = lazy(() => import('@/features/admin/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 const AdminListPage = lazy(() => import('@/features/admin/AdminListPage').then(module => ({ default: module.AdminListPage })));
+const AccountPage = lazy(() => import('@/features/auth/AccountPage').then(module => ({ default: module.AccountPage })));
+const AdminAuditPage = lazy(() => import('@/features/admin/AdminAuditPage').then(module => ({ default: module.AdminAuditPage })));
 const AdminDetailPage = lazy(() => import('@/features/admin/AdminDetailPage').then(module => ({ default: module.AdminDetailPage })));
 
 function HomeRedirect() {
@@ -43,6 +48,22 @@ function RequireRole({ role }: { role: Role }) {
   if (!user) return <Navigate to="/login" replace />;
   return user.role === role ? <Outlet /> : <UnauthorizedState home={roles[user.role].landing} />;
 }
+/**
+ * /foundation, the platform guide: inside the workspace shell for signed-in users (menu,
+ * header and breadcrumb stay available); a public frame with sign-in for visitors.
+ */
+function GuideLayout() {
+  const { user } = useAuth();
+  if (user) return <AppShell />;
+  return <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+    <header className="mb-8 flex items-center justify-between gap-3 border-b pb-6">
+      <Link to="/login" className="flex min-h-11 items-center gap-3 font-semibold"><Factory aria-hidden="true" className="text-primary" />KaarigarLink</Link>
+      <Button asChild variant="outline"><Link to="/login">Sign in</Link></Button>
+    </header>
+    <main id="main" tabIndex={-1} className="outline-none"><Suspense fallback={<LoadingState label="Loading platform guide…" />}><Outlet /></Suspense></main>
+    <footer className="mt-10 border-t pt-6 text-xs text-muted-foreground">KaarigarLink <span aria-hidden="true">/</span> Manufacturing job-work marketplace</footer>
+  </div>;
+}
 function NotFound() {
   const { user } = useAuth();
   return <div className="mx-auto max-w-xl p-8"><h1 className="text-2xl font-semibold">Page not found</h1><p className="mt-3 text-sm text-muted-foreground">Check the address or return to your workspace.</p><Button asChild className="mt-6"><Link to={user ? roles[user.role].landing : '/login'}>Return to {user ? 'my workspace' : 'sign in'}</Link></Button></div>;
@@ -51,7 +72,7 @@ function RouteFocus() {
   const { pathname } = useLocation();
   const previous = useRef(pathname);
   useEffect(() => {
-    document.title = 'KaarigarLink · ' + (pathname === '/login' ? 'Sign in' : pathname === '/foundation' ? 'Frontend foundation' : 'Workspace');
+    document.title = 'KaarigarLink · ' + (pathname === '/login' ? 'Sign in' : pathname === '/foundation' ? 'Platform guide' : 'Workspace');
     if (previous.current !== pathname) {
       window.scrollTo(0, 0);
       document.getElementById('main')?.focus({ preventScroll: true });
@@ -61,14 +82,14 @@ function RouteFocus() {
   return null;
 }
 export function AppRoutes() {
-  const { pathname } = useLocation();
   return <>
-    {pathname !== "/foundation" && <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-card focus:p-3">Skip to content</a>}
+    <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-card focus:p-3">Skip to content</a>
     <RouteFocus />
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/foundation" element={<Suspense fallback={<LoadingState label="Loading foundation…" />}><FoundationPage /></Suspense>} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/foundation" element={<GuideLayout />}><Route index element={<FoundationPage />} /></Route>
       <Route element={<RequireSession />}>
         <Route element={<AppShell />}>
           {/* Workshop routes share this router, session, shell and role guard. */}
@@ -77,6 +98,7 @@ export function AppRoutes() {
             <Route path="dashboard" element={role === 'buyer' ? <BuyerDashboard /> : role === 'inspector' ? <InspectorDashboard /> : role === 'admin' ? <AdminDashboard /> : <WorkshopPage />} />
             {role === 'buyer' && <>
               <Route path="orders" element={<OrdersListPage />} />
+              <Route path="profile" element={<BuyerProfilePage />} />
               <Route path="orders/:id" element={<OrderDetailPage />} />
               <Route path="orders/:id/review" element={<OrderDetailPage reviewOnly />} />
               <Route path="jobs" element={<JobsListPage />} />
@@ -96,6 +118,8 @@ export function AppRoutes() {
               <Route path="rework" element={<InspectionsPage key="rework" view="rework" />} />
               <Route path="history" element={<InspectionsPage key="history" view="history" />} />
             </>}
+            {role === 'admin' && <Route path="audit" element={<AdminAuditPage />} />}
+            {(role === 'admin' || role === 'inspector') && <Route path="account" element={<AccountPage />} />}
             {role === 'admin' && (['users', 'workshops', 'jobs', 'orders', 'quality'] as const).map(section => <Route key={section} path={section}>
               <Route index element={<AdminListPage key={section} section={section} />} />
               <Route path=":id" element={<AdminDetailPage key={section} section={section} />} />

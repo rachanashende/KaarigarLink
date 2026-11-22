@@ -15,8 +15,9 @@ import { BuyerLoading } from './BuyerLoading';
 import { JobWorkspaceNav } from './JobWorkspaceNav';
 import { WorkshopDetails, WorkshopFacts } from './WorkshopDetails';
 import { useBuyerMatches } from './queries';
+import { placeLabel } from '@/components/utils';
 
-const invitationLabels = { PENDING: 'Pending', ACCEPTED: 'Accepted', DECLINED: 'Declined' };
+const invitationLabels = { PENDING: 'Pending', ACCEPTED: 'Accepted', DECLINED: 'Declined', EXPIRED: 'Expired' };
 export function MatchesPage() {
   const { id = '' } = useParams();
   const query = useBuyerMatches(id);
@@ -53,12 +54,12 @@ function MatchesWorkspace({ data }: { data: BuyerMatchesData }) {
   return <>
     <PageHeader title="Workshop matches" description={data.job.title} />
     <JobWorkspaceNav jobId={data.job.id} />
-    <p className="mb-5 text-sm text-muted-foreground">{eligible.length} eligible workshops · Demo recommendations with match explanations</p>
+    <p className="mb-5 text-sm text-muted-foreground">{eligible.length} eligible workshops · {data.source === 'snapshot' ? 'Scores recorded when each invitation was sent (the job is no longer open, so matching is not recalculated)' : data.source === 'live' ? 'Matching calculated now from current workshop data' : 'Demo recommendations with match explanations'}</p>
     {feedback && <div ref={feedbackRef} tabIndex={-1} role="status" className="mb-6 rounded-lg border border-primary/30 bg-secondary p-4 text-sm text-primary">{feedback}</div>}
     {!eligible.length && <div className="mb-6"><EmptyState title="No eligible workshop matches" description="No eligible recommendations were returned for this job. Check your capability and delivery requirements, or post a revised brief. " action={<Button asChild variant="outline"><Link to={'/buyer/jobs/' + encodeURIComponent(data.job.id)}>Review job brief</Link></Button>} /></div>}
     <div className="space-y-5">{data.results.map((result, index) => <article key={result.workshop.id} aria-labelledby={'match-' + result.workshop.id} className="rounded-lg border bg-card p-5 sm:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0"><p className="mb-2 text-xs text-muted-foreground">Rank {index + 1}</p><h2 id={'match-' + result.workshop.id} className="break-words text-xl font-semibold">{result.workshop.name}</h2><p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><MapPin aria-hidden="true" className="size-4 shrink-0" />{result.workshop.location.city}, {result.workshop.location.state}</p></div>
+        <div className="min-w-0"><p className="mb-2 text-xs text-muted-foreground">Rank {index + 1}</p><h2 id={'match-' + result.workshop.id} className="break-words text-xl font-semibold">{result.workshop.name}</h2><p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><MapPin aria-hidden="true" className="size-4 shrink-0" />{placeLabel(result.workshop.location)}</p></div>
         <div className="rounded-md border bg-background px-4 py-3"><p className="text-xs text-muted-foreground">Match score</p><p className="mt-1 text-2xl font-semibold tabular-nums">{result.match.score}</p></div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2"><StatusBadge tone={result.match.eligibility.eligible ? 'info' : 'warning'}>{result.match.eligibility.eligible ? 'Eligible' : 'Not eligible'}</StatusBadge><StatusBadge>Invitation: {result.invitation ? invitationLabels[result.invitation.status] : 'Not invited'}</StatusBadge></div>

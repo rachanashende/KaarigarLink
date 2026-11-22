@@ -4,12 +4,14 @@ import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState } from '@/components/feedback';
 import { useBuyerJobs } from './queries';
+import { useServices } from '@/app/services';
 import { filterJobs, jobStatuses, type JobSort } from './model';
 import { JobsTable } from './JobsTable';
 import { BuyerLoading } from './BuyerLoading';
 import { jobControlClass } from './JobField';
 
 export function JobsListPage() {
+  const live = !useServices().demo;
   const query = useBuyerJobs();
   const [params, setParams] = useSearchParams();
   const search = params.get('q') ?? '';
@@ -33,6 +35,6 @@ export function JobsListPage() {
     </div>
     <p role="status" className="mb-4 text-sm text-muted-foreground">{jobs.length} of {query.data.length} jobs</p>
     {!query.data.length ? <EmptyState title="No manufacturing jobs yet" description="Post your first requirement to keep your manufacturing brief and delivery details together." action={action} /> : jobs.length ? <JobsTable jobs={jobs} /> : <EmptyState title="No jobs match these filters" description="Try another title or clear the filters to see your jobs." action={<Button variant="outline" onClick={() => setParams({}, { replace: true })}>Clear filters</Button>} />}
-    <p className="mt-5 text-xs text-muted-foreground">Mock workspace · development data is saved on this browser; production demo builds are memory-only. Reset demo data from Manufacturing orders.</p>
+    {!live && <p className="mt-5 text-xs text-muted-foreground">Mock workspace · development data is saved on this browser; production demo builds are memory-only. Reset demo data from Manufacturing orders.</p>}
   </>;
 }

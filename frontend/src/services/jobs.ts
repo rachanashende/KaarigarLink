@@ -31,4 +31,6 @@ export interface BuyerService extends BuyerMarketplaceService, BuyerOrderService
   listJobs(buyerId: string): Promise<Job[]>;
   getJob(buyerId: string, jobId: string): Promise<Job>;
   createJob(buyerId: string, input: CreateJobInput): Promise<Job>;
+  /** Live mode only (M12): publish a draft or cancel an unawarded job. */
+  setJobStatus?(buyerId: string, jobId: string, status: 'OPEN' | 'CANCELLED'): Promise<void>;
 }

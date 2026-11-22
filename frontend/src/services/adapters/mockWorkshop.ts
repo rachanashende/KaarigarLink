@@ -56,6 +56,7 @@ function inspectionView(state: Collections, item: Inspection): WorkshopInspectio
       const common = { id: record.id, inspectorId: record.inspectorId, submittedAt: record.submittedAt,
         findings: { summary: record.findings.summary, items: record.findings.items.map(({ id, result, notes }) => ({ id, result, notes })) } };
       return record.decision === 'ACCEPTED' ? { ...common, decision: 'ACCEPTED' as const } :
+        record.decision === 'FAILED' ? { ...common, decision: 'FAILED' as const } :
         { ...common, decision: 'REWORK' as const, reason: record.reason, correctiveAction: record.correctiveAction, reworkDeadline: record.reworkDeadline };
     }),
   };

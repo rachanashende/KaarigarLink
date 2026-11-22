@@ -6,6 +6,14 @@ export interface AuthContextValue {
   signIn: AuthService['login'];
   demoSignIn: AuthService['demoLogin'];
   signOut: AuthService['logout'];
+  /** "live" when backed by the Express API; "mock" for the demo identity switch. */
+  kind: 'mock' | 'live';
+  /** Present in live mode only. */
+  register?: NonNullable<AuthService['register']>;
+  /** A message for the sign-in page, e.g. after the session expired. */
+  notice: string | null;
+  /** Re-reads the signed-in user (e.g. after a profile change). */
+  refreshUser: () => Promise<void>;
 }
 export const AuthContext = createContext<AuthContextValue | null>(null);
 export function useAuth() {

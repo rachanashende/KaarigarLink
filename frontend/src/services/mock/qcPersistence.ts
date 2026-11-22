@@ -6,6 +6,7 @@ const id = z.string().min(1).max(200);
 const common = { id, inspectorId: id, submittedAt: z.iso.datetime(), findings: findingsSchema };
 const recordSchema = z.discriminatedUnion('decision', [
   z.strictObject({ ...common, decision: z.literal('ACCEPTED') }),
+  z.strictObject({ ...common, decision: z.literal('FAILED') }),
   z.strictObject({ ...common, decision: z.literal('REWORK'), reason: z.string().min(10).max(4000), correctiveAction: z.string().min(10).max(4000), reworkDeadline: z.iso.date() }),
 ]);
 export const qcUpdatesSchema = z.array(z.strictObject({

@@ -6,7 +6,7 @@ import type { QCStatus } from '@/types';
 import { dateLabel, isOverdue, qcLabels } from './model';
 
 export function QCBadge({ status }: { status: QCStatus }) {
-  return <StatusBadge tone={status === 'REWORK' ? 'danger' : status === 'PENDING' ? 'warning' : 'info'}>{qcLabels[status]}</StatusBadge>;
+  return <StatusBadge tone={status === 'REWORK' || status === 'FAILED' ? 'danger' : status === 'PENDING' ? 'warning' : 'info'}>{qcLabels[status]}</StatusBadge>;
 }
 export function InspectionTable({ items, caption = 'Assigned inspections' }: { items: InspectorInspectionData[]; caption?: string }) {
   return <DataTable caption={caption} rows={items} rowKey={item => item.inspection.id} columns={[
