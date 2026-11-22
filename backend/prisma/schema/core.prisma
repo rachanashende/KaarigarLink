@@ -115,6 +115,9 @@ model User {
   // Member 2: add back-relations here, e.g.
   //   ordersAsBuyer Order[]      @relation("BuyerOrders")
   //   inspections   Inspection[]
+  ordersAsBuyer Order[]      @relation("BuyerOrders")
+  inspections   Inspection[]
+  ratingsGiven  Rating[]     @relation("BuyerRatings")
 
   @@index([role])
 }
@@ -148,6 +151,9 @@ model Workshop {
   //   quotes  Quote[]
   //   orders  Order[]
   //   ratings Rating[]
+  quotes  Quote[]
+  orders  Order[]
+  ratings Rating[]
 
   @@index([verificationStatus])
 }
@@ -234,6 +240,8 @@ model Job {
   // Member 2: add back-relations here, e.g.
   //   quotes Quote[]
   //   order  Order?
+  quotes Quote[]
+  order  Order?
 
   @@index([buyerId])
   @@index([status])
@@ -276,6 +284,7 @@ model JobInvitation {
 
   // Member 2: Quote should reference invitationId so only invited workshops quote.
   //   quotes Quote[]
+  quotes Quote[]
 
   @@unique([jobId, workshopId])
   @@index([workshopId, status])

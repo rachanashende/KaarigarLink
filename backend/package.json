@@ -6,7 +6,7 @@
   "type": "commonjs",
   "main": "dist/server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=22 <25"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -23,6 +23,7 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
+    "smoke": "tsx scripts/smoke.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
